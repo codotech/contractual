@@ -30,7 +30,6 @@
     "lint": "pnpm lerna run lint --parallel",
     "prepare": "husky",
     "version:preview": "lerna changed --json | jq -r '.[] | \"\\(.name) → v\\(.version)\"'",
-    "pack:check": "node scripts/check-packages.mjs",
     "e2e:verdaccio:up": "docker compose -f local-e2e.docker-compose.yaml up -d",
     "e2e:verdaccio:down": "docker compose -f local-e2e.docker-compose.yaml down -v"
   },

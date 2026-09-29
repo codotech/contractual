@@ -30,9 +30,8 @@ jobs:
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm test
-      - run: node --test scripts/*.test.mjs
       - run: pnpm test:e2e
-      - run: pnpm pack:check
+      - uses: ./.github/actions/verify-packages
   ci:
     name: CI
     if: always()

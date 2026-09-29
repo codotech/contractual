@@ -47,12 +47,26 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm test:e2e
-      - run: pnpm pack:check
+      - uses: ./.github/actions/verify-packages
       - name: Check npm authorization and package metadata
-        run: node scripts/release-preflight.mjs
         env:
           DIST_TAG: ${{ inputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          case "$DIST_TAG" in dev|next|rc|alpha|beta|latest) ;; *) exit 1 ;; esac
+          test -n "$NODE_AUTH_TOKEN"
+          npm_user="$(npm whoami --registry=https://registry.npmjs.org/)"
+          package_access="$(npm access list packages "$npm_user" --json)"
+          for manifest in packages/*/package.json; do
+            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            package_name="$(jq -r '.name' "$manifest")"
+            jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public"' "$manifest" > /dev/null
+            jq -e --arg name "$package_name" '.[$name] == "read-write"' <<< "$package_access" > /dev/null
+            if [ "$DIST_TAG" = latest ]; then
+              jq -e '.version | contains("-") | not' "$manifest" > /dev/null
+            fi
+            echo "$package_name: publishing preflight passed ($DIST_TAG)"
+          done
       - name: Publish approved versions (does not create Git tags)
         env:
           DIST_TAG: ${{ inputs.dist_tag }}
