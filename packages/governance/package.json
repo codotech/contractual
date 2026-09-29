@@ -46,11 +46,12 @@
     "@contractual/differs.json-schema": "workspace:*",
     "@contractual/differs.openapi": "workspace:*",
     "@contractual/types": "workspace:*",
-    "ajv": "^8.17.1",
+    "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
-    "@redocly/openapi-core": "^1.0.0"
+    "vitest": "^4.1.11",
+    "@redocly/openapi-core": "^1.34.20"
   },
   "publishConfig": {
     "access": "public",

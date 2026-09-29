@@ -18,11 +18,11 @@ on:
         default: 'next'
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   e2e:
+    if: github.ref == 'refs/heads/next'
     name: E2E (${{ matrix.e2e-project }}, Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
@@ -34,7 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.target_branch }}
+          ref: next
           fetch-depth: 0
 
       - name: Setup Node ${{ matrix.node-version }}
