@@ -41,7 +41,7 @@
   "dependencies": {
     "@contractual/types": "workspace:*",
     "semver": "^7.8.5",
-    "yaml": "^2.9.1"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/semver": "^7.8.0",
