@@ -35,7 +35,7 @@
     "@redocly/openapi-core": "^1.34.20"
   },
   "devDependencies": {
-    "rimraf": "^5.0.10"
+    "rimraf": "^6.1.3"
   },
   "publishConfig": {
     "access": "public",
