@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { readFileSync } from 'node:fs';
 import { initCommand } from './commands/init.command.js';
 import { contractAddCommand, contractListCommand } from './commands/contract.command.js';
 import { lintCommand } from './commands/lint.command.js';
@@ -11,7 +12,12 @@ import { statusCommand } from './commands/status.command.js';
 
 const program = new Command();
 
-program.name('contractual').description('Schema contract lifecycle orchestrator').version('0.1.0');
+const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  .version as string;
+program
+  .name('contractual')
+  .description('Schema contract lifecycle orchestrator')
+  .version(packageVersion);
 
 program
   .command('init')

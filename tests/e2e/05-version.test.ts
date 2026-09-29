@@ -420,7 +420,7 @@ describe('contractual version', () => {
     }
   });
 
-  test('skips contracts not found in config', () => {
+  test('preserves all changesets and versions when a contract is unknown', () => {
     const { dir, cleanup } = createTempRepo();
     try {
       setupRepoWithConfig(dir, [
@@ -456,31 +456,27 @@ describe('contractual version', () => {
 `
       );
 
-      const result = run('version', dir);
+      const result = run('version', dir, { expectFail: true });
 
-      // Assert: command succeeds (processes what it can)
-      expect(result.exitCode).toBe(0);
+      // Validation happens before any version or changeset mutation.
+      expect(result.exitCode).not.toBe(0);
 
-      // Assert: existing contract was bumped
+      // Assert: existing contract was not bumped
       const versions = readJSON(dir, '.contractual/versions.json') as Record<
         string,
         { version: string }
       >;
-      expect(versions['existing-api'].version).toBe('1.1.0');
+      expect(versions['existing-api'].version).toBe('1.0.0');
 
       // Assert: nonexistent contract was not added to versions
       expect(versions['nonexistent-api']).toBeUndefined();
 
-      // Assert: changeset was still consumed
+      // Assert: changeset was preserved
       const changesetFiles = listFiles(dir, '.contractual/changesets');
-      expect(changesetFiles).toHaveLength(0);
+      expect(changesetFiles).toEqual(['mixed-update.md']);
 
-      // Assert: changelog only contains the valid contract
-      const changelog = readFile(dir, 'CHANGELOG.md');
-      expect(changelog).toContain('[existing-api] v1.1.0');
-      expect(changelog).toContain('Updated existing API');
-      // The nonexistent-api changes should NOT appear in changelog (no version bumped for it)
-      expect(changelog).not.toContain('[nonexistent-api]');
+      // Assert: no changelog was created
+      expect(fileExists(dir, 'CHANGELOG.md')).toBe(false);
     } finally {
       cleanup();
     }

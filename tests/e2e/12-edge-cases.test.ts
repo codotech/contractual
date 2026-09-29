@@ -7,6 +7,7 @@ import {
   setupRepoWithConfig,
   writeFile,
   ensureCliBuilt,
+  fileExists,
 } from './helpers.js';
 
 beforeAll(() => {
@@ -339,9 +340,11 @@ This references a non-existent contract
 `
         );
 
-        const result = run('version', dir);
-        // Should process changesets - the unknown one will be in the aggregation
-        expect(result.exitCode).toBe(0);
+        const result = run('version', dir, { expectFail: true });
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr).toContain('ghost-api');
+        expect(fileExists(dir, '.contractual/changesets/valid-change.md')).toBe(true);
+        expect(fileExists(dir, '.contractual/changesets/orphan-change.md')).toBe(true);
       } finally {
         cleanup();
       }

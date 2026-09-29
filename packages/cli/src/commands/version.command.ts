@@ -69,6 +69,12 @@ export async function versionCommand(options: VersionOptions = {}): Promise<void
   }
 
   // Read all changesets
+  if (config.versioning?.mode === 'fixed') {
+    throw new Error(
+      'Fixed versioning is not implemented. Use versioning.mode: independent. No versions were changed.'
+    );
+  }
+
   const readSpinner = ora('Reading changesets...').start();
   const changesetsDir = join(contractualDir, CHANGESETS_DIR);
   const changesets = await readChangesets(changesetsDir);
@@ -87,6 +93,15 @@ export async function versionCommand(options: VersionOptions = {}): Promise<void
 
   // Aggregate bumps (highest wins per contract)
   const aggregatedBumps = aggregateBumps(changesets);
+
+  const unknownContracts = Object.keys(aggregatedBumps).filter(
+    (name) => !config.contracts.some((contract) => contract.name === name)
+  );
+  if (unknownContracts.length > 0) {
+    throw new Error(
+      `Changesets reference unknown contracts: ${unknownContracts.join(', ')}. No changesets were consumed.`
+    );
+  }
 
   if (Object.keys(aggregatedBumps).length === 0) {
     if (options.json) {
