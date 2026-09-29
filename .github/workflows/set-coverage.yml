@@ -1,93 +1,28 @@
 name: Test & Coverage
 on:
   push:
-    branches:
-      - master
-
+    branches: [next]
 permissions:
-  id-token: write
   contents: read
-  checks: write
-
 jobs:
   test:
-    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        project: ['cli', 'governance', 'changesets', 'json-schema-differ', 'types']
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
         with:
-          node-version: '22.x'
-
-      - uses: actions/cache@v4
-        with:
-          path: '**/node_modules'
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Create Coverage Directory
-        run: mkdir -p ${{ github.workspace }}/coverage
-
-      - name: Test
-        run: pnpm lerna run test --scope @contractual/${{ matrix.project }} --stream
-        continue-on-error: true
-        env:
-          COVERAGE_DIR: ${{ github.workspace }}/coverage
-          COVERAGE_FILE: coverage-${{ matrix.project }}.xml
-
-      - name: Upload Report to Codecov
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec vitest run --coverage
+      - name: Upload report to Codecov
         uses: codecov/codecov-action@v4
         with:
-          name: codecov-umbrella
-          flags: ${{ matrix.project }}
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          files: ${{ github.workspace }}/coverage/coverage-${{ matrix.project }}.xml
-          verbose: true
-
-  e2e:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-
-      - uses: actions/cache@v4
-        with:
-          path: '**/node_modules'
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Run E2E Tests
-        run: pnpm test:e2e
+          files: coverage/cobertura-coverage.xml

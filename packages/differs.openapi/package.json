@@ -32,10 +32,10 @@
   "dependencies": {
     "@contractual/differs.core": "workspace:*",
     "@contractual/types": "workspace:*",
-    "@redocly/openapi-core": "^1.0.0"
+    "@redocly/openapi-core": "^1.34.20"
   },
   "devDependencies": {
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.10"
   },
   "publishConfig": {
     "access": "public",

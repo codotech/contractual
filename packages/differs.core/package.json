@@ -46,7 +46,7 @@
     "@contractual/types": "workspace:*"
   },
   "devDependencies": {
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.10"
   },
   "publishConfig": {
     "access": "public",

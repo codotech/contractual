@@ -8,7 +8,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "vitest": "^3.0.3",
+    "vitest": "^4.1.11",
     "typescript": "~5.7.2",
     "yaml": "^2.8.2"
   },
