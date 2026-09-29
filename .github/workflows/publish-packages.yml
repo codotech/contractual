@@ -1,164 +1,73 @@
 name: Publish Packages
-env:
-  CI: true
-
-permissions:
-  id-token: write
-  contents: write
-
 on:
   workflow_dispatch:
     inputs:
+      commit:
+        description: Full reviewed commit SHA on next, explicitly approved by Omer
+        required: true
+        type: string
       dist_tag:
-        description: 'Distribution Tag'
+        description: Approved npm distribution tag
         type: choice
-        options:
-          - 'next'
-          - 'latest'
-          - 'rc'
-          - 'dev'
-          - 'alpha'
-          - 'beta'
+        options: [dev, next, rc, alpha, beta, latest]
+        default: dev
         required: true
-        default: 'dev'
-      strategy:
-        description: 'Release Strategy'
-        type: choice
-        options:
-          - 'from-git'
-          - 'from-package'
-        required: true
-        default: 'from-package'
-
+permissions:
+  id-token: write
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
-  e2e:
-    name: Build and Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        e2e-project: ['jest/nestjs', 'sinon/nestjs', 'vitest/nestjs', 'jest/inversify', 'sinon/inversify', 'vitest/inversify']
-        node-version: [16.x, 18.x, 20.x]
-        exclude:
-          - e2e-project: 'vitest/inversify'
-            node-version: '16.x'
-          - e2e-project: 'vitest/nestjs'
-            node-version: '16.x'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.target_branch }}
-
-      - name: Remove Vitest If Needed
-        if: ${{ matrix.node-version == '16.x' }}
-        run: |
-          rm -rf packages/doubles/vitest
-          git config --global user.email "ci@suites.dev"
-          git config --global user.name "Suites CI"
-          git add .
-          git commit -am "remove vitest temp"
-
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.4
-  
-      - name: PNPM
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Verdaccio Docker
-        run: |
-          docker run -d --name verdaccio \
-          -p 4873:4873 \
-          -v ${{ github.workspace }}/e2e/config.yaml:/verdaccio/conf/config.yaml \
-          verdaccio/verdaccio
-
-      - name: Build
-        run: pnpm build
-
-      - name: Setup Registry
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          registry-url: http://localhost:4873
-          scope: '@suites'
-          always-auth: false
-
-      - name: Install jq
-        run: sudo apt-get install jq
-
-      - name: Remove provenance from publishConfig
-        run: |
-          find packages -name 'package.json' | while read filename; do
-            jq 'del(.publishConfig.provenance)' "$filename" > temp.json && mv temp.json "$filename"
-          done
-
-      - name: Commit Change
-        run: |
-          git config --global user.email "e2e@suites.dev"
-          git config --global user.name "Suites e2e"
-          git add .
-          git commit -am "remove provenance"
-
-      - name: Publish Packages
-        run: |
-          pnpm publish -r \
-            --no-git-checks \
-            --access public \
-            --tag ci \
-            --force 
-      - name: Setup and Test
-        run: |
-          IFS='/' read -r library framework <<< "${{ matrix.e2e-project }}"
-          echo "FRAMEWORK=$framework" >> $GITHUB_ENV
-          echo "LIBRARY=$library" >> $GITHUB_ENV
-
-      - name: Clean Source
-        run: |
-          rm -rf packages
-          rm -rf node_modules
-
-      - name: Install Dependencies
-        run: |
-          cd "$PWD/e2e/$LIBRARY/$FRAMEWORK"
-          npm install --no-cache --no-package-lock
-          npm install --dev --no-package-lock @types/node@${{ matrix.node-version }}
-
-      - name: Execute Test
-        run: |
-          cd "$PWD/e2e/$LIBRARY/$FRAMEWORK"
-          npm test
-
   publish:
-    name: Publish Packages
-    needs: [e2e]
+    if: github.ref == 'refs/heads/next'
+    environment: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Registry
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          registry-url: https://registry.npmjs.org/
-          scope: '@suites'
-          always-auth: true
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+      - name: Verify approved commit belongs to next
+        env:
+          APPROVED_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          git merge-base --is-ancestor HEAD origin/next
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.4
-
-      - name: pnpm
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Publish Packages
-        run: pnpm publish -r ${{ github.event.inputs.strategy }} --access public --tag ${{ github.event.inputs.dist_tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - name: Check npm authorization and package metadata
         env:
+          DIST_TAG: ${{ inputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          case "$DIST_TAG" in dev|next|rc|alpha|beta|latest) ;; *) exit 1 ;; esac
+          test -n "$NODE_AUTH_TOKEN"
+          npm_user="$(npm whoami --registry=https://registry.npmjs.org/)"
+          package_access="$(npm access list packages "$npm_user" --json)"
+          for manifest in packages/*/package.json; do
+            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            package_name="$(jq -r '.name' "$manifest")"
+            jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public"' "$manifest" > /dev/null
+            jq -e --arg name "$package_name" '.[$name] == "read-write"' <<< "$package_access" > /dev/null
+            if [ "$DIST_TAG" = latest ]; then
+              jq -e '.version | contains("-") | not' "$manifest" > /dev/null
+            fi
+            echo "$package_name: publishing preflight passed ($DIST_TAG)"
+          done
+      - name: Publish approved versions (does not create Git tags)
+        env:
+          DIST_TAG: ${{ inputs.dist_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm exec lerna publish from-package --yes --dist-tag "$DIST_TAG" --no-git-reset

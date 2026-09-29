@@ -62,8 +62,7 @@
       {
         "devDependencies": true,
         "optionalDependencies": false,
-        "peerDependencies": false,
-        "packageDir": "./"
+        "peerDependencies": false
       }
     ],
     "@typescript-eslint/consistent-type-imports": [
@@ -71,6 +70,13 @@
       {
         "prefer": "type-imports",
         "disallowTypeAnnotations": false
+      }
+    ],
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
       }
     ]
   },

@@ -1,0 +1,20 @@
+{
+  "name": "contractual-e2e-cli-basic",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@contractual/cli": "e2e"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "vitest": "^4.1.11",
+    "typescript": "~5.7.2"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

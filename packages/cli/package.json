@@ -1,20 +1,28 @@
 {
   "name": "@contractual/cli",
   "private": false,
-  "version": "0.0.0",
+  "version": "0.1.0-dev.8",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "contractual": "./bin/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/contractual-dev/contractual.git",
+    "url": "https://github.com/codotech/contractual.git",
     "directory": "packages/cli"
   },
   "homepage": "https://contractual.dev",
   "bugs": {
-    "url": "https://github.com/contractual-dev/contractual/issues"
+    "url": "https://github.com/codotech/contractual/issues"
   },
   "contributors": [
     {
@@ -33,7 +41,7 @@
     }
   ],
   "engines": {
-    "node": ">=18.12.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "prebuild": "pnpm rimraf dist",
@@ -45,23 +53,28 @@
   "files": [
     "bin",
     "dist",
+    "src/config/schema.json",
     "README.md"
   ],
   "dependencies": {
-    "@contractual/generators.contract": "workspace:*",
-    "@contractual/generators.diff": "workspace:*",
-    "@contractual/generators.spec": "workspace:*",
-    "chalk": "^5.4.1",
+    "@contractual/changesets": "workspace:*",
+    "@contractual/governance": "workspace:*",
+    "@contractual/types": "workspace:*",
+    "@inquirer/prompts": "^8.7.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "chalk": "^6.0.0",
     "commander": "^12.1.0",
-    "inquirer": "^12.3.2",
-    "ora": "^8.1.1"
+    "fast-glob": "^3.3.3",
+    "ora": "^9.4.1",
+    "yaml": "^2.8.3"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "devDependencies": {
-    "@vitest/coverage-c8": "^0.33.0",
-    "vitest": "^3.0.3"
+    "@vitest/coverage-v8": "^4.1.11",
+    "vitest": "^4.1.11"
   }
 }

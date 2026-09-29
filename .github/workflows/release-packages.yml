@@ -3,88 +3,65 @@ on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'Release Type'
+        description: Approved release type
         type: choice
-        options:
-          - 'graduate'
-          - 'prerelease'
+        options: [prerelease, graduate]
+        default: prerelease
         required: true
-        default: 'prerelease'
-      target_branch:
-        description: 'Target Branch'
-        type: choice
-        options:
-          - 'master'
-          - 'next'
-        required: true
-        default: 'next'
       preid:
-        description: 'Prefix Id'
+        description: Prerelease identifier
         type: choice
-        options:
-          - 'latest'
-          - 'next'
-          - 'rc'
-          - 'dev'
-          - 'alpha'
-          - 'beta'
+        options: [dev, next, rc, alpha, beta]
+        default: dev
         required: true
-        default: 'next'
-      exact_version:
-        description: 'Exact Version'
-        type: string
-        required: false
-
 permissions:
   contents: write
-  id-token: write
-
+  pull-requests: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
-  tag-version:
-    name: Tag Version
+  prepare:
+    if: github.ref == 'refs/heads/next'
+    environment: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.target_branch }}
+          ref: next
           fetch-depth: 0
-
-      - name: Config Git User
-        run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - name: Prerelease Version (Exact Version)
-        if: ${{ github.event.inputs.release_type == 'prerelease' && github.event.inputs.exact_version }}
-        run: |
-         pnpm version ${{ github.event.inputs.exact_version }} \
-          --workspaces-update \
-          --no-git-tag-version \
-          --no-commit-hooks
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - name: Prepare version changes without tags
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Prerelease Version
-        if: ${{ github.event.inputs.release_type == 'prerelease' && !github.event.inputs.exact_version }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          PREID: ${{ inputs.preid }}
         run: |
-         pnpm version prerelease \
-          --preid ${{ github.event.inputs.preid }} \
-          --workspaces-update \
-          --no-git-tag-version \
-          --no-commit-hooks
+          git switch -c "chore/release-${GITHUB_RUN_ID}"
+          if [ "$RELEASE_TYPE" = graduate ]; then
+            pnpm exec lerna version --conventional-graduate --yes --no-git-tag-version --no-push --no-commit-hooks --allow-branch "chore/release-${GITHUB_RUN_ID}"
+          else
+            pnpm exec lerna version --conventional-commits --conventional-prerelease --preid "$PREID" --yes --no-git-tag-version --no-push --no-commit-hooks --allow-branch "chore/release-${GITHUB_RUN_ID}"
+          fi
+      - name: Open a release PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Graduate Version
-        if: ${{ github.event.inputs.release_type == 'graduate' }}
-        run: pnpm version --workspaces-update from-git
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push Changes to Branch
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git push origin ${{ github.event.inputs.target_branch }} --no-verify
-          git push origin --tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if git diff --quiet; then
+            echo 'No version changes to prepare.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add packages pnpm-lock.yaml
+          git commit -m 'chore: prepare package versions'
+          git push origin "HEAD:refs/heads/chore/release-${GITHUB_RUN_ID}"
+          gh pr create --base next --head "chore/release-${GITHUB_RUN_ID}" --title 'chore: prepare package versions' --body 'Review package versions and validation before merging. This PR does not tag or publish. Publishing requires a separate explicit approval from Omer. Because this PR uses GITHUB_TOKEN, a maintainer must reopen it to trigger PR checks.'

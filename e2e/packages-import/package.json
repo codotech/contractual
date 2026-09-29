@@ -1,0 +1,23 @@
+{
+  "name": "contractual-e2e-packages-import",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@contractual/types": "e2e",
+    "@contractual/changesets": "e2e",
+    "@contractual/governance": "e2e",
+    "@contractual/differs.json-schema": "e2e"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "vitest": "^4.1.11",
+    "typescript": "~5.7.2"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && vitest run"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

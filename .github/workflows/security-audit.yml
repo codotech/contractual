@@ -1,0 +1,25 @@
+name: Dependency security audit
+on:
+  pull_request:
+    branches: [next]
+  push:
+    branches: [next]
+  schedule:
+    - cron: '30 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: pnpm audit --audit-level low
