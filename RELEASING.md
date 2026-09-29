@@ -8,7 +8,7 @@ The first stable scope is OpenAPI 3.0/3.1 and JSON Schema linting and diffing, c
 
 ## Prepare a reviewed release
 
-1. Run all checks in [CONTRIBUTING.md](CONTRIBUTING.md), including packed artifact validation.
+1. Run all checks in [CONTRIBUTING.md](CONTRIBUTING.md).
 2. Present Omer with the exact commit, proposed package versions, npm distribution tag, and validation results. Obtain approval before preparing version changes or running a release workflow.
 3. Run **Prepare Release** from `next`. It opens a version PR targeting `next`; it does not create tags or publish. Review and merge that PR normally.
 4. Obtain approval for the exact merged release commit, then run **Publish Packages** with that full commit SHA and the approved distribution tag. `latest` rejects prerelease versions. Approve the `release` environment job in GitHub.

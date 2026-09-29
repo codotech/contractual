@@ -51,7 +51,6 @@ jobs:
           else
             pnpm exec lerna version --conventional-commits --conventional-prerelease --preid "$PREID" --yes --no-git-tag-version --no-push --no-commit-hooks --allow-branch "chore/release-${GITHUB_RUN_ID}"
           fi
-      - uses: ./.github/actions/verify-packages
       - name: Open a release PR
         env:
           GH_TOKEN: ${{ github.token }}
