@@ -107,12 +107,25 @@ export async function lintJsonSchema(
   // Warn about unknown $schema versions
   if (schema.$schema && typeof schema.$schema === 'string') {
     const schemaUri = schema.$schema;
-    const supportedDrafts = ['draft-04', 'draft-06', 'draft-07', 'draft/2019-09', 'draft/2020-12'];
-    const isKnown = supportedDrafts.some(
-      (draft) => schemaUri.includes(draft) || schemaUri.includes(draft.replace('draft-', 'draft/'))
-    );
+    let isKnown = false;
+    try {
+      const uri = new URL(schemaUri);
+      const paths = [
+        '/draft-04/schema',
+        '/draft-06/schema',
+        '/draft-07/schema',
+        '/draft/2019-09/schema',
+        '/draft/2020-12/schema',
+      ];
+      isKnown =
+        ['http:', 'https:'].includes(uri.protocol) &&
+        uri.hostname === 'json-schema.org' &&
+        paths.includes(uri.pathname);
+    } catch {
+      // Malformed identifiers are unrecognized drafts.
+    }
 
-    if (!isKnown && !schemaUri.includes('json-schema.org')) {
+    if (!isKnown) {
       warnings.push({
         path: '/$schema',
         message: `Unknown schema draft: ${schemaUri}. Validation may be incomplete.`,

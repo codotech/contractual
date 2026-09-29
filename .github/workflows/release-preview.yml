@@ -3,14 +3,6 @@ name: Release Preview
 on:
   workflow_dispatch:
     inputs:
-      target_branch:
-        description: 'Branch to preview release from'
-        type: choice
-        options:
-          - 'next'
-          - 'master'
-        required: true
-        default: 'next'
       release_type:
         description: 'Release Type'
         type: choice
@@ -38,13 +30,15 @@ permissions:
 jobs:
   preview:
     name: Preview Release
+    if: github.ref == 'refs/heads/next'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.target_branch }}
+          ref: next
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -82,7 +76,7 @@ jobs:
             --preid ${{ inputs.preid }} \
             --no-git-tag-version \
             --no-push \
-            --allow-branch ${{ inputs.target_branch }}
+            --allow-branch next
 
       - name: Preview Versions (Graduate)
         if: ${{ inputs.release_type == 'graduate' }}
@@ -91,7 +85,7 @@ jobs:
             --conventional-graduate \
             --no-git-tag-version \
             --no-push \
-            --allow-branch ${{ inputs.target_branch }}
+            --allow-branch next
 
       - name: Preview Versions (Auto - Conventional Commits)
         if: ${{ inputs.release_type == 'auto' }}
@@ -100,7 +94,7 @@ jobs:
             --conventional-commits \
             --no-git-tag-version \
             --no-push \
-            --allow-branch ${{ inputs.target_branch }}
+            --allow-branch next
 
       - name: Generate Version Summary
         run: |
