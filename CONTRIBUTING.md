@@ -17,7 +17,7 @@ pnpm test
 pnpm test:e2e
 ```
 
-These commands validate source and behavior. CI runs them on Node 22 and 24. Normal CI never publishes or tags. Use existing GitHub Actions and native workflow commands, without a separate scripts folder or custom package-verification action.
+These commands validate source and behavior. CI runs them on Node 22, 24, and 26. Normal CI never publishes or tags. Use existing GitHub Actions and native workflow commands, without a separate scripts folder or custom package-verification action.
 
 ## Open a PR to next
 
