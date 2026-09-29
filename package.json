@@ -2,17 +2,17 @@
   "name": "contractual-monorepo",
   "private": true,
   "version": "0.0.0",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/contractual-dev/contractual.git"
+    "url": "https://github.com/codotech/contractual.git"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "bugs": {
-    "url": "https://github.com/contractual-dev/contractual.git"
+    "url": "https://github.com/codotech/contractual.git"
   },
   "homepage": "https://contractual.dev",
   "contributors": [
@@ -24,13 +24,13 @@
   "scripts": {
     "build": "pnpm lerna run build --stream",
     "build:watch": "pnpm -r run build:watch",
-    "test": "pnpm lerna run test --stream",
+    "test": "vitest run",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "test:e2e:watch": "vitest --config vitest.config.e2e.ts",
     "lint": "pnpm lerna run lint --parallel",
     "prepare": "husky",
     "version:preview": "lerna changed --json | jq -r '.[] | \"\\(.name) → v\\(.version)\"'",
-    "publish:dry": "lerna publish from-package --yes --no-git-reset --dry-run",
+    "pack:check": "node scripts/check-packages.mjs",
     "e2e:verdaccio:up": "docker compose -f local-e2e.docker-compose.yaml up -d",
     "e2e:verdaccio:down": "docker compose -f local-e2e.docker-compose.yaml down -v"
   },

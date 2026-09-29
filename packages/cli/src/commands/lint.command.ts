@@ -38,7 +38,7 @@ function getLinterForContract(contract: ResolvedContract): LinterLookupResult {
   const linter = getRegisteredLinter(contract.type, contract.lint);
 
   if (linter === null) {
-    return { status: 'disabled' };
+    return { status: 'not-found', type: contract.type };
   }
 
   if (!linter) {
@@ -106,6 +106,18 @@ export async function lintCommand(options: LintOptions = {}): Promise<void> {
 
       // No linter registered for this type
       if (linterResult.status === 'not-found') {
+        results.push({
+          contract: contract.name,
+          specPath: contract.absolutePath,
+          errors: [
+            {
+              path: '',
+              severity: 'error',
+              message: `No linter available for ${contract.type}. Configure a custom lint command or set lint: false.`,
+            },
+          ],
+          warnings: [],
+        });
         if (format === 'text') {
           spinner?.stopAndPersist({
             symbol: chalk.yellow('!'),

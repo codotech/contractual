@@ -14,12 +14,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/contractual-dev/contractual.git",
+    "url": "https://github.com/codotech/contractual.git",
     "directory": "packages/differs.json-schema"
   },
-  "homepage": "https://github.com/contractual-dev/contractual/tree/main/packages/differs.json-schema",
+  "homepage": "https://github.com/codotech/contractual/tree/next/packages/differs.json-schema",
   "bugs": {
-    "url": "https://github.com/contractual-dev/contractual/issues"
+    "url": "https://github.com/codotech/contractual/issues"
   },
   "keywords": [
     "json-schema",
@@ -33,13 +33,13 @@
     "validation"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "tsc -p tsconfig.build.json",
     "build:watch": "tsc -p tsconfig.build.json --watch",
-    "test": "vitest run",
+    "test": "vitest run --config ../../vitest.config.e2e.ts --root ../.. tests/e2e/09-differs.json-schema.test.ts",
     "test:watch": "vitest",
     "lint": "eslint \"src/**/*.ts\""
   },

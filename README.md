@@ -5,14 +5,14 @@
 <h1 align="center">Contractual</h1>
 
 <p align="center">
-Schema contract lifecycle for OpenAPI, JSON Schema, and AsyncAPI
+Schema contract lifecycle for OpenAPI and JSON Schema
 <br />
 Linting • Breaking change detection • Versioning • Release automation
 </p>
 
 <div align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license" /></a>
-  <a href="https://github.com/contractual-dev/contractual/blob/main/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome" /></a>
+  <a href="https://github.com/codotech/contractual/blob/next/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome" /></a>
   <a href="https://npmjs.org/package/@contractual/cli"><img src="https://img.shields.io/npm/dm/@contractual/cli.svg?label=%40contractual%2Fcli" alt="npm downloads" /></a>
 </div>
 
@@ -27,7 +27,7 @@ Linting • Breaking change detection • Versioning • Release automation
 </h3>
 
 <p align="center">
-<strong>Supported Formats:</strong> <a href="https://www.openapis.org/">OpenAPI</a>, <a href="https://json-schema.org/">JSON Schema</a>, <a href="https://www.asyncapi.com/">AsyncAPI</a>
+<strong>Supported Formats:</strong> <a href="https://www.openapis.org/">OpenAPI</a>, <a href="https://json-schema.org/">JSON Schema</a>
 </p>
 
 ## Features
@@ -38,7 +38,7 @@ Linting • Breaking change detection • Versioning • Release automation
 
 - **CI Integration** - GitHub Action posts diff tables on PRs, auto-generates changesets, and opens Version PRs for release automation.
 
-- **Format Agnostic** - Works with OpenAPI, JSON Schema, and AsyncAPI. Custom linters and differs can be configured per contract.
+- **Format Agnostic** - Works with OpenAPI and JSON Schema. Custom linters and differs can be configured per contract.
 
 ## Quick Example
 
@@ -78,15 +78,17 @@ Updated CHANGELOG.md
 
 ## Installation
 
+Development releases are currently available under the npm `dev` tag. There is no stable release yet. Built-in linting and diffing support OpenAPI and JSON Schema; AsyncAPI and ODCS require custom engines. AI, fixed versioning, and generation hooks are planned. See [release scope](RELEASING.md) and [contributing](CONTRIBUTING.md).
+
 ```bash
-npm install -g @contractual/cli
+npm install -g @contractual/cli@dev
 ```
 
 Or with other package managers:
 
 ```bash
-pnpm add -g @contractual/cli
-yarn global add @contractual/cli
+pnpm add -g @contractual/cli@dev
+yarn global add @contractual/cli@dev
 ```
 
 ## Getting Started
@@ -102,7 +104,7 @@ yarn global add @contractual/cli
 ## Community
 
 - [Documentation](https://contractual.dev)
-- [GitHub Issues](https://github.com/contractual-dev/contractual/issues)
+- [GitHub Issues](https://github.com/codotech/contractual/issues)
 
 ## License
 

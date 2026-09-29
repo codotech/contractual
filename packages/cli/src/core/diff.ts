@@ -88,8 +88,9 @@ async function diffSingleContract(
   const differ = getDiffer(contract.type, contract.breaking);
 
   if (differ === null) {
-    // Disabled via config override
-    return createEmptyResult(contract.name, 'disabled');
+    throw new Error(
+      `No differ available for ${contract.type} contract "${contract.name}". Configure a custom breaking command or set breaking: false explicitly.`
+    );
   }
 
   if (!differ) {

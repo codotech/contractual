@@ -25,11 +25,11 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "https://github.com/contractual-dev/contractual.git",
+    "url": "https://github.com/codotech/contractual.git",
     "directory": "packages/changesets"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "prebuild": "pnpm rimraf dist",

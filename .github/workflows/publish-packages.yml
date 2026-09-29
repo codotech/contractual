@@ -1,106 +1,60 @@
 name: Publish Packages
-env:
-  CI: true
-
-permissions:
-  id-token: write
-  contents: write
-
 on:
   workflow_dispatch:
     inputs:
+      commit:
+        description: Full reviewed commit SHA on next, explicitly approved by Omer
+        required: true
+        type: string
       dist_tag:
-        description: 'Distribution Tag'
+        description: Approved npm distribution tag
         type: choice
-        options:
-          - 'next'
-          - 'latest'
-          - 'rc'
-          - 'dev'
-          - 'alpha'
-          - 'beta'
+        options: [dev, next, rc, alpha, beta, latest]
+        default: dev
         required: true
-        default: 'next'
-      target_branch:
-        description: 'Target branch to release from'
-        type: choice
-        options:
-          - 'next'
-          - 'master'
-        required: true
-        default: 'next'
-
+permissions:
+  id-token: write
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   publish:
-    name: Publish to NPM
+    if: github.ref == 'refs/heads/next'
+    environment: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.target_branch }}
+          ref: ${{ inputs.commit }}
           fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-          registry-url: https://registry.npmjs.org/
-          scope: '@contractual'
-          always-auth: true
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Verify approved commit belongs to next
+        env:
+          APPROVED_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          git merge-base --is-ancestor HEAD origin/next
+      - uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm lerna run build
-
-      - name: Capture Versions for Report
-        run: |
-          echo "## Publishing to NPM" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** \`https://registry.npmjs.org/\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Dist Tag:** \`${{ github.event.inputs.dist_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ github.event.inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Packages:" >> $GITHUB_STEP_SUMMARY
-          lerna ls --json | jq -r '.[] | "- **\(.name)** -> `v\(.version)`"' >> $GITHUB_STEP_SUMMARY
-
-      - name: Publish Packages
-        run: |
-          npx lerna publish from-package --yes \
-            --dist-tag ${{ github.event.inputs.dist_tag }} \
-            --no-git-reset
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - run: pnpm pack:check
+      - name: Check npm authorization and package metadata
+        run: node scripts/release-preflight.mjs
         env:
+          DIST_TAG: ${{ inputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Generate Success Summary
-        if: success()
-        run: |
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Publish Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All packages have been successfully published to npm!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Installation command:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "npm install @contractual/cli@${{ github.event.inputs.dist_tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Generate Failure Summary
-        if: failure()
-        run: |
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Publish Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The publish step failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Common issues:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Version already exists in npm registry" >> $GITHUB_STEP_SUMMARY
-          echo "- Authentication token is invalid or expired" >> $GITHUB_STEP_SUMMARY
-          echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
+      - name: Publish approved versions (does not create Git tags)
+        env:
+          DIST_TAG: ${{ inputs.dist_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm exec lerna publish from-package --yes --dist-tag "$DIST_TAG" --no-git-reset

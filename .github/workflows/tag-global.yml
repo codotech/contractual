@@ -6,13 +6,18 @@ on:
       tag_name:
         description: 'Tag Name (e.g. v1.0.0)'
         required: true
+      commit:
+        description: 'Full reviewed commit SHA on next, explicitly approved by Omer'
+        required: true
+        type: string
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   tag-and-push:
+    if: github.ref == 'refs/heads/next'
+    environment: release
     name: Tag and Push
     runs-on: ubuntu-latest
 
@@ -20,7 +25,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.commit }}
           fetch-depth: 0
+
+      - name: Verify approved commit
+        env:
+          APPROVED_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          git merge-base --is-ancestor HEAD origin/next
 
       - name: Config Git
         run: |
@@ -28,14 +42,19 @@ jobs:
           git config --global user.name "${{ github.actor }}"
 
       - name: Tag and Push
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
         run: |
-          git tag -a ${{ inputs.tag_name }} -m "Tag Version ${{ inputs.tag_name }}"
-          git push origin ${{ inputs.tag_name }}
+          git check-ref-format "refs/tags/$TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Tag Version $TAG_NAME"
+          git push origin "refs/tags/$TAG_NAME"
 
       - name: Generate Summary
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
         run: |
           echo "## Tag Created" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag:** \`${{ inputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`$TAG_NAME\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`$(git rev-parse HEAD)\`" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`$(git rev-parse --abbrev-ref HEAD)\`" >> $GITHUB_STEP_SUMMARY

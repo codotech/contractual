@@ -22,15 +22,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/contractual-dev/contractual.git",
+    "url": "https://github.com/codotech/contractual.git",
     "directory": "packages/governance"
   },
   "homepage": "https://contractual.dev",
   "bugs": {
-    "url": "https://github.com/contractual-dev/contractual/issues"
+    "url": "https://github.com/codotech/contractual/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "prebuild": "pnpm rimraf dist",
