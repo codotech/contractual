@@ -52,7 +52,7 @@
     "@contractual/types": "workspace:*"
   },
   "devDependencies": {
-    "rimraf": "^5.0.10",
+    "rimraf": "^6.1.3",
     "vitest": "^4.1.11"
   },
   "publishConfig": {
