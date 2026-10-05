@@ -34,7 +34,7 @@
     "e2e:verdaccio:down": "docker compose -f local-e2e.docker-compose.yaml down -v"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
+    "@types/node": "^26.6.4",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitest/coverage-v8": "^4.1.11",
