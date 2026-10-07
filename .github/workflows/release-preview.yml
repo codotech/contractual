@@ -3,16 +3,16 @@ on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: Release type to preview locally
+        description: Use preminor to enter beta, prerelease for the next beta
         type: choice
-        options: [prerelease, graduate, auto]
-        default: auto
+        options: [preminor, prerelease]
+        default: preminor
         required: true
       preid:
         description: Prerelease identifier
         type: choice
-        options: [dev, next, rc, alpha, beta]
-        default: next
+        options: [beta]
+        default: beta
         required: true
 permissions:
   contents: read
@@ -40,14 +40,10 @@ jobs:
           RELEASE_TYPE: ${{ inputs.release_type }}
           PREID: ${{ inputs.preid }}
         run: |
-          case "$PREID" in dev|next|rc|alpha|beta) ;; *) exit 1 ;; esac
-          args=(--yes --no-git-tag-version --no-push --no-commit-hooks --allow-branch next)
-          case "$RELEASE_TYPE" in
-            prerelease) pnpm exec lerna version prerelease --preid "$PREID" "${args[@]}" ;;
-            graduate) pnpm exec lerna version --conventional-graduate "${args[@]}" ;;
-            auto) pnpm exec lerna version --conventional-commits "${args[@]}" ;;
-            *) exit 1 ;;
-          esac
+          test "$PREID" = beta
+          case "$RELEASE_TYPE" in preminor|prerelease) ;; *) exit 1 ;; esac
+          pnpm exec lerna version "$RELEASE_TYPE" --preid "$PREID" --conventional-commits --yes --no-git-tag-version --no-push --no-commit-hooks --ignore-scripts --allow-branch next
+          pnpm install --lockfile-only --ignore-scripts
       - name: Summarize local preview
         run: |
           echo '## Proposed versions (preview only)' >> "$GITHUB_STEP_SUMMARY"
