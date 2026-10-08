@@ -6,14 +6,7 @@ on:
         description: Full reviewed commit SHA on next, explicitly approved by Omer
         required: true
         type: string
-      dist_tag:
-        description: Approved npm distribution tag
-        type: choice
-        options: [dev, next, rc, alpha, beta, latest]
-        default: dev
-        required: true
 permissions:
-  id-token: write
   contents: read
 concurrency:
   group: release
@@ -23,18 +16,23 @@ jobs:
     if: github.ref == 'refs/heads/next'
     environment: release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      APPROVED_COMMIT: ${{ inputs.commit }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.commit }}
+          ref: next
           fetch-depth: 0
-      - name: Verify approved commit belongs to next
-        env:
-          APPROVED_COMMIT: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify and select the exact approved commit
         run: |
           [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$APPROVED_COMMIT" origin/next
+          git switch --detach "$APPROVED_COMMIT"
           test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
-          git merge-base --is-ancestor HEAD origin/next
       - uses: pnpm/action-setup@v6
         with:
           version: 9.15.4
@@ -43,31 +41,46 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org/
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level low
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm test:e2e
-      - name: Check npm authorization and package metadata
+      - name: Verify beta metadata, immutable tags, and retry ownership
         env:
-          DIST_TAG: ${{ inputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          case "$DIST_TAG" in dev|next|rc|alpha|beta|latest) ;; *) exit 1 ;; esac
           test -n "$NODE_AUTH_TOKEN"
           npm_user="$(npm whoami --registry=https://registry.npmjs.org/)"
           package_access="$(npm access list packages "$npm_user" --json)"
           for manifest in packages/*/package.json; do
             if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))' "$manifest" > /dev/null
             package_name="$(jq -r '.name' "$manifest")"
-            jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public"' "$manifest" > /dev/null
+            version="$(jq -r '.version' "$manifest")"
+            tag="$package_name@$version"
             jq -e --arg name "$package_name" '.[$name] == "read-write"' <<< "$package_access" > /dev/null
-            if [ "$DIST_TAG" = latest ]; then
-              jq -e '.version | contains("-") | not' "$manifest" > /dev/null
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$APPROVED_COMMIT"
             fi
-            echo "$package_name: publishing preflight passed ($DIST_TAG)"
+            if npm view "$package_name@$version" --json > "$RUNNER_TEMP/registry-package.json"; then
+              jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' "$RUNNER_TEMP/registry-package.json" > /dev/null
+              test "$(npm view "$package_name" dist-tags.beta)" = "$version"
+            else
+              jq -e '.error.code == "E404"' "$RUNNER_TEMP/registry-package.json" > /dev/null
+            fi
+            echo "$tag: publishing preflight passed (beta)"
           done
-      - name: Publish approved versions (does not create Git tags)
+      - name: Publish only to beta, never latest
         env:
-          DIST_TAG: ${{ inputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm exec lerna publish from-package --yes --dist-tag "$DIST_TAG" --no-git-reset
+        run: pnpm exec lerna publish from-package --yes --dist-tag beta --git-head "$APPROVED_COMMIT" --no-git-reset
+      - name: Verify published metadata (tagging remains a separate approval)
+        run: |
+          for manifest in packages/*/package.json; do
+            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            package_name="$(jq -r '.name' "$manifest")"
+            version="$(jq -r '.version' "$manifest")"
+            npm view "$package_name@$version" --json | jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' > /dev/null
+            test "$(npm view "$package_name" dist-tags.beta)" = "$version"
+          done
