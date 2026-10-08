@@ -1,7 +1,7 @@
 {
   "name": "@contractual/changesets",
   "private": false,
-  "version": "0.1.0-dev.6",
+  "version": "0.1.0-beta.0",
   "description": "Changeset creation, parsing, and versioning utilities for Contractual",
   "license": "MIT",
   "type": "module",
