@@ -1,6 +1,6 @@
 {
   "name": "@contractual/differs.json-schema",
-  "version": "0.1.0-dev.7",
+  "version": "0.1.0-beta.0",
   "description": "Detect breaking changes between JSON Schema versions with semantic classification",
   "license": "MIT",
   "type": "module",

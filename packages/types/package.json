@@ -1,7 +1,7 @@
 {
   "name": "@contractual/types",
   "private": false,
-  "version": "0.1.0-dev.5",
+  "version": "0.1.0-beta.0",
   "description": "TypeScript type definitions for Contractual - schema contract lifecycle orchestration",
   "license": "MIT",
   "type": "module",
