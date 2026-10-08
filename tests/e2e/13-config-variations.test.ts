@@ -1,5 +1,6 @@
-import { describe, test, expect, beforeAll } from 'vitest';
+import { describe, test, expect, beforeAll, vi } from 'vitest';
 import path from 'node:path';
+import { ConfigError, resolveContractPaths } from '../../packages/cli/src/config/loader.js';
 import {
   createTempRepo,
   copyFixture,
@@ -167,6 +168,102 @@ ai:
 
       // Verify the file exists at the expected location
       expect(fileExists(dir, 'schemas/order.json')).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test.each([
+    ['reported deeply nested braces', '{'.repeat(4500) + 'x' + '}'.repeat(4500) + '*', '1024 characters'],
+    ['oversized flat glob', 'x'.repeat(1024) + '*', '1024 characters'],
+    ['nested braces', '{'.repeat(33) + 'x' + '}'.repeat(33) + '*', '32 levels'],
+    ['nested parentheses', '('.repeat(33) + 'x' + ')'.repeat(33) + '*', '32 levels'],
+    ['mixed nesting', '{('.repeat(17) + 'x' + ')}'.repeat(17) + '*', '32 levels'],
+    ['quoted closing braces', '{"}"'.repeat(33) + '*', '32 levels'],
+    ['character-class closing braces', '{[}]'.repeat(33) + '*', '32 levels'],
+    ['escaped closing braces', '{\\}'.repeat(33) + '*', '32 levels'],
+    ['mismatched closing braces', '(}'.repeat(33) + '*', '32 levels'],
+  ])('rejects %s as a controlled configuration error', (_name, pattern, limit) => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      writeFile(dir, 'contractual.yaml', JSON.stringify({
+        contracts: [{ name: 'api', type: 'openapi', path: pattern }],
+      }));
+
+      const result = run('status', dir, { expectFail: true, timeout: 5000 });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Glob for contract "api" exceeds');
+      expect(result.stderr).toContain(limit);
+      expect(result.stderr).not.toContain('Maximum call stack');
+      expect(result.stderr).not.toContain(pattern);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test.each([
+    'schemas/{order,other}.j*',
+    'schemas/{order,{other,third}}.j*',
+    'schemas/@(order|other).j*',
+    'schemas/[o]rder.j*',
+  ])('preserves normal glob matching: %s', (pattern) => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      copyFixture('json-schema/order-base.json', path.join(dir, 'schemas/order.json'));
+      const contracts = resolveContractPaths({
+        contracts: [{ name: 'order', type: 'json-schema', path: pattern }],
+      }, dir);
+      expect(contracts).toHaveLength(1);
+      expect(contracts[0].absolutePath).toBe(path.join(dir, 'schemas/order.json'));
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('bounds the full resolved pattern and accepts the exact length limit', () => {
+    const { dir, cleanup } = createTempRepo();
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const prefixLength = path.resolve(dir).length + path.sep.length;
+      const pattern = 'x'.repeat(1024 - prefixLength - 1) + '*';
+      const config = { contracts: [{ name: 'api', type: 'openapi' as const, path: pattern }] };
+      expect(() => resolveContractPaths(config, dir)).not.toThrow();
+      config.contracts[0].path += '*';
+      expect(() => resolveContractPaths(config, dir)).toThrow(ConfigError);
+      expect(() => resolveContractPaths(config, dir)).toThrow('1024 characters');
+    } finally {
+      warning.mockRestore();
+      cleanup();
+    }
+  });
+
+  test.each([
+    ['exact nesting limit', '{'.repeat(32) + 'x' + '}'.repeat(32) + '*'],
+    ['escaped braces', '\\{'.repeat(40) + 'x' + '\\}'.repeat(40) + '*'],
+    ['quoted braces', '"' + '{'.repeat(40) + 'x' + '}'.repeat(40) + '"*'],
+    ['character-class braces', '[' + '{'.repeat(40) + ']' + '*'],
+  ])('accepts %s without treating literals as nesting', (_name, pattern) => {
+    const { dir, cleanup } = createTempRepo();
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => resolveContractPaths({
+        contracts: [{ name: 'api', type: 'openapi', path: pattern }],
+      }, dir)).not.toThrow();
+    } finally {
+      warning.mockRestore();
+      cleanup();
+    }
+  });
+
+  test('leaves literal paths with braces unchanged', () => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      const relativePath = 'schemas/' + '{'.repeat(40) + 'order' + '}'.repeat(40) + '.json';
+      copyFixture('json-schema/order-base.json', path.join(dir, relativePath));
+      const contracts = resolveContractPaths({
+        contracts: [{ name: 'order', type: 'json-schema', path: relativePath }],
+      }, dir);
+      expect(contracts[0].absolutePath).toBe(path.join(dir, relativePath));
     } finally {
       cleanup();
     }

@@ -22,4 +22,52 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: pnpm audit --audit-level low
+      - name: Install dependencies for complete audit paths
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Audit dependencies (two approved exceptions expire October 22)
+        env:
+          AUDIT_EXCEPTIONS_EXPIRE_AT: '2026-10-22T05:37:00Z'
+        run: |
+          # Omer approved these two temporary risks on 2026-10-08, not a release.
+          # braces: CLI glob size/depth guards mitigate input; tooling remains affected.
+          # http-cache-semantics: reviewed Lerna callers use private caches on fresh runners.
+          # Remove exceptions when patched; expiry never rolls forward automatically.
+          report="$RUNNER_TEMP/dependency-audit.json"
+          audit_status=0
+          pnpm audit --json > "$report" || audit_status=$?
+          cat "$report"
+          # Registry errors, muted findings, unexpected statuses/schema must fail closed.
+          jq -e --argjson status "$audit_status" '
+            type == "object" and (has("error") | not) and .muted == [] and
+            (.advisories | type == "object") and
+            (.metadata.vulnerabilities | keys == ["critical", "high", "info", "low", "moderate"]) and
+            (.metadata.vulnerabilities | all(.[]; type == "number" and . >= 0)) and
+            (([.metadata.vulnerabilities[]] | add) == (.advisories | length)) and
+            (($status == 0 and (.advisories | length) == 0) or
+             ($status == 1 and (.advisories | length) > 0)) and
+            (.advisories | all(.[];
+              (.module_name | type == "string") and
+              (.findings | type == "array" and length > 0) and
+              (.findings | all(.[]; (.version | type == "string") and
+                (.paths | type == "array" and length > 0) and
+                (.paths | all(.[]; type == "string"))))))
+          ' "$report" > /dev/null
+          jq --arg expires "$AUDIT_EXCEPTIONS_EXPIRE_AT" --argjson now "$(date +%s)" '
+            [.advisories[] | select(
+              ($now < ($expires | fromdateiso8601) and
+                ((.github_advisory_id == "GHSA-vfj7-8cjw-p6xm" and
+                  .module_name == "braces" and all(.findings[]; .version == "3.0.3")) or
+                 (.github_advisory_id == "GHSA-ch52-4w7c-c8xp" and
+                  .module_name == "http-cache-semantics" and
+                  all(.findings[]; .version == "4.2.0" and
+                    all(.paths[]; startswith(". > lerna@9.0.7 > ")))))) | not)]
+          ' "$report" > "$RUNNER_TEMP/blocking-advisories.json"
+          if ! jq -e 'length == 0' "$RUNNER_TEMP/blocking-advisories.json" > /dev/null; then
+            cat "$RUNNER_TEMP/blocking-advisories.json"
+            echo "::error::Audit contains unapproved findings or the temporary exceptions have expired."
+            exit 1
+          fi
+          if jq -e '.advisories | length > 0' "$report" > /dev/null; then
+            echo "::warning::Audit passed with approved risk exceptions until $AUDIT_EXCEPTIONS_EXPIRE_AT; dependencies remain affected."
+            echo "Audit: temporary risk accepted for the reported braces/http-cache-semantics findings until $AUDIT_EXCEPTIONS_EXPIRE_AT. Not release approval." >> "$GITHUB_STEP_SUMMARY"
+          fi
