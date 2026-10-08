@@ -10,6 +10,10 @@ import { validateConfig, formatValidationErrors } from './validator.js';
  */
 const CONFIG_FILENAMES = ['contractual.yaml', 'contractual.yml'];
 
+// Bound the input and recursive AST depth before fast-glob invokes braces.
+const MAX_GLOB_PATTERN_LENGTH = 1024;
+const MAX_GLOB_NESTING = 32;
+
 /**
  * Error thrown when config cannot be loaded
  */
@@ -17,6 +21,58 @@ export class ConfigError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ConfigError';
+  }
+}
+
+function validateGlobPattern(pattern: string, contractName: string): void {
+  if (pattern.length > MAX_GLOB_PATTERN_LENGTH) {
+    throw new ConfigError(
+      `Glob for contract "${contractName}" exceeds ${MAX_GLOB_PATTERN_LENGTH} characters after resolving its path`
+    );
+  }
+
+  const nesting: string[] = [];
+  let quote: string | undefined;
+  let brackets = 0;
+
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index];
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (brackets > 0) {
+      if (character === '[') brackets++;
+      if (character === ']') brackets--;
+      continue;
+    }
+    if (character === '[') {
+      brackets++;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      quote = character;
+      continue;
+    }
+    // Parentheses also create recursive nodes in the braces parser. Only a
+    // matching closer ends a node; quoted/class/escaped closers are literals.
+    if (character === '{' || character === '(') {
+      nesting.push(character);
+      if (nesting.length > MAX_GLOB_NESTING) {
+        throw new ConfigError(
+          `Glob for contract "${contractName}" exceeds ${MAX_GLOB_NESTING} levels of brace/parenthesis nesting`
+        );
+      }
+    } else if (
+      (character === '}' && nesting.at(-1) === '{') ||
+      (character === ')' && nesting.at(-1) === '(')
+    ) {
+      nesting.pop();
+    }
   }
 }
 
@@ -79,6 +135,7 @@ export function resolveContractPaths(
 
     // Check if it's a glob pattern
     if (pattern.includes('*')) {
+      validateGlobPattern(absolutePattern, contract.name);
       const matches = fg.sync(absolutePattern, { onlyFiles: true });
       if (matches.length === 0) {
         console.warn(
