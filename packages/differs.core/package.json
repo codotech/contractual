@@ -1,0 +1,55 @@
+{
+  "name": "@contractual/differs.core",
+  "version": "0.1.0-beta.0",
+  "description": "Core schema diffing primitives — walker, classifiers, ref-resolver — shared across Contractual differs",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codotech/contractual.git",
+    "directory": "packages/differs.core"
+  },
+  "homepage": "https://github.com/codotech/contractual/tree/next/packages/differs.core",
+  "bugs": {
+    "url": "https://github.com/codotech/contractual/issues"
+  },
+  "keywords": [
+    "json-schema",
+    "diff",
+    "breaking-changes",
+    "semver",
+    "schema",
+    "api",
+    "compatibility"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prebuild": "rimraf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@contractual/types": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.1.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

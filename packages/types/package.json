@@ -1,0 +1,51 @@
+{
+  "name": "@contractual/types",
+  "private": false,
+  "version": "0.1.0-beta.0",
+  "description": "TypeScript type definitions for Contractual - schema contract lifecycle orchestration",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codotech/contractual.git",
+    "directory": "packages/types"
+  },
+  "homepage": "https://contractual.dev",
+  "bugs": {
+    "url": "https://github.com/codotech/contractual/issues"
+  },
+  "keywords": [
+    "contractual",
+    "types",
+    "typescript",
+    "openapi",
+    "json-schema",
+    "asyncapi",
+    "odcs",
+    "schema",
+    "contract"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prebuild": "pnpm rimraf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

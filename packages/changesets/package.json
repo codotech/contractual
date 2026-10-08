@@ -1,0 +1,54 @@
+{
+  "name": "@contractual/changesets",
+  "private": false,
+  "version": "0.1.0-beta.0",
+  "description": "Changeset creation, parsing, and versioning utilities for Contractual",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./changesets": {
+      "types": "./dist/changesets/index.d.ts",
+      "import": "./dist/changesets/index.js"
+    },
+    "./versioning": {
+      "types": "./dist/versioning/index.d.ts",
+      "import": "./dist/versioning/index.js"
+    }
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codotech/contractual.git",
+    "directory": "packages/changesets"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prebuild": "pnpm rimraf dist",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@contractual/types": "workspace:*",
+    "semver": "^7.8.5",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0",
+    "vitest": "^4.1.11"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

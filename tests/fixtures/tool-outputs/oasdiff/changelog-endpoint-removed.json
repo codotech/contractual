@@ -1,0 +1,1 @@
+[{"id":"api-path-removed-without-deprecation","text":"api path removed without deprecation","level":3,"operation":"GET","operationId":"findPetsByTags","path":"/pet/findByTags","source":"openapi/petstore-base.yaml","section":"paths"}]

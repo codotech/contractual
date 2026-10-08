@@ -1,0 +1,60 @@
+{
+  "name": "@contractual/governance",
+  "private": false,
+  "version": "0.1.0-beta.0",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./linters": {
+      "types": "./dist/linters/index.d.ts",
+      "import": "./dist/linters/index.js"
+    },
+    "./differs": {
+      "types": "./dist/differs/index.d.ts",
+      "import": "./dist/differs/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codotech/contractual.git",
+    "directory": "packages/governance"
+  },
+  "homepage": "https://contractual.dev",
+  "bugs": {
+    "url": "https://github.com/codotech/contractual/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prebuild": "pnpm rimraf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "lint": "eslint \"linters/**/*.ts\" \"differs/**/*.ts\" \"*.ts\""
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@contractual/differs.json-schema": "workspace:*",
+    "@contractual/differs.openapi": "workspace:*",
+    "@contractual/types": "workspace:*",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@redocly/openapi-core": "^1.34.20",
+    "vitest": "^4.1.11"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

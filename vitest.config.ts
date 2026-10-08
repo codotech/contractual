@@ -3,7 +3,7 @@ import process from 'process';
 
 export default defineConfig({
   test: {
-    workspace: ['packages/*', 'packages/generators/*', 'packages/providers/*'],
+    include: ['packages/**/*.test.ts', 'packages/**/*.spec.ts'],
     reporters: ['default', 'junit'],
     outputFile: {
       junit:

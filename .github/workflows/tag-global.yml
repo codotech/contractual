@@ -4,30 +4,73 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag Name (e.g. v1.0.0)'
+        description: 'Approved immutable beta tag (e.g. v0.2.0-beta.0)'
         required: true
+      commit:
+        description: 'Full reviewed commit SHA on next, explicitly approved by Omer'
+        required: true
+        type: string
 
 permissions:
   contents: write
-  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   tag-and-push:
+    if: github.ref == 'refs/heads/next'
+    environment: release
     name: Tag and Push
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
+          ref: next
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify approved commit and beta tag
+        env:
+          APPROVED_COMMIT: ${{ inputs.commit }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TAG_NAME" =~ ^(v|@contractual/[a-z.-]+@)[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]
+          git check-ref-format "refs/tags/$TAG_NAME"
+          git merge-base --is-ancestor "$APPROVED_COMMIT" origin/next
+          git switch --detach "$APPROVED_COMMIT"
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          if [[ "$TAG_NAME" == @contractual/* ]]; then
+            package_name="${TAG_NAME%@*}"
+            version="${TAG_NAME##*@}"
+            jq -se --arg name "$package_name" --arg version "$version" 'any(.[]; .name == $name and .version == $version)' packages/*/package.json > /dev/null
+          fi
+          if git show-ref --verify --quiet "refs/tags/$TAG_NAME"; then
+            test "$(git rev-parse "refs/tags/$TAG_NAME^{commit}")" = "$APPROVED_COMMIT"
+          fi
 
       - name: Config Git
         run: |
-          git config --global user.email "omer.moradd@gmail.com"
-          git config --global user.name "Omer Morad"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
       - name: Tag and Push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          APPROVED_COMMIT: ${{ inputs.commit }}
         run: |
-          git tag -a ${{ inputs.tag_name }} -m "Tag Version ${{ inputs.tag_name }}"
-          git push origin ${{ inputs.tag_name }}
+          if ! git show-ref --verify --quiet "refs/tags/$TAG_NAME"; then
+            git tag -a "$TAG_NAME" "$APPROVED_COMMIT" -m "Tag Version $TAG_NAME"
+          fi
+          git -c credential.helper='!gh auth git-credential' push origin "refs/tags/$TAG_NAME"
+
+      - name: Generate Summary
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          echo "Tagged $TAG_NAME at $(git rev-parse HEAD). No packages were published." >> "$GITHUB_STEP_SUMMARY"

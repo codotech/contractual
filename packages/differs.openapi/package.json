@@ -1,0 +1,44 @@
+{
+  "name": "@contractual/differs.openapi",
+  "private": false,
+  "version": "0.1.0-beta.0",
+  "description": "OpenAPI 3.0/3.1 breaking change detection for Contractual",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codotech/contractual.git",
+    "directory": "packages/differs.openapi"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "prebuild": "rimraf dist",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@contractual/differs.core": "workspace:*",
+    "@contractual/types": "workspace:*",
+    "@redocly/openapi-core": "^1.34.20"
+  },
+  "devDependencies": {
+    "rimraf": "^6.1.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

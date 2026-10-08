@@ -1,164 +1,133 @@
 name: Publish Packages
-env:
-  CI: true
-
-permissions:
-  id-token: write
-  contents: write
-
 on:
   workflow_dispatch:
     inputs:
-      dist_tag:
-        description: 'Distribution Tag'
-        type: choice
-        options:
-          - 'next'
-          - 'latest'
-          - 'rc'
-          - 'dev'
-          - 'alpha'
-          - 'beta'
+      commit:
+        description: Full reviewed commit SHA on next, explicitly approved by Omer
         required: true
-        default: 'dev'
-      strategy:
-        description: 'Release Strategy'
-        type: choice
-        options:
-          - 'from-git'
-          - 'from-package'
-        required: true
-        default: 'from-package'
-
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
-  e2e:
-    name: Build and Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        e2e-project: ['jest/nestjs', 'sinon/nestjs', 'vitest/nestjs', 'jest/inversify', 'sinon/inversify', 'vitest/inversify']
-        node-version: [16.x, 18.x, 20.x]
-        exclude:
-          - e2e-project: 'vitest/inversify'
-            node-version: '16.x'
-          - e2e-project: 'vitest/nestjs'
-            node-version: '16.x'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.target_branch }}
-
-      - name: Remove Vitest If Needed
-        if: ${{ matrix.node-version == '16.x' }}
-        run: |
-          rm -rf packages/doubles/vitest
-          git config --global user.email "ci@suites.dev"
-          git config --global user.name "Suites CI"
-          git add .
-          git commit -am "remove vitest temp"
-
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.4
-  
-      - name: PNPM
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Verdaccio Docker
-        run: |
-          docker run -d --name verdaccio \
-          -p 4873:4873 \
-          -v ${{ github.workspace }}/e2e/config.yaml:/verdaccio/conf/config.yaml \
-          verdaccio/verdaccio
-
-      - name: Build
-        run: pnpm build
-
-      - name: Setup Registry
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          registry-url: http://localhost:4873
-          scope: '@suites'
-          always-auth: false
-
-      - name: Install jq
-        run: sudo apt-get install jq
-
-      - name: Remove provenance from publishConfig
-        run: |
-          find packages -name 'package.json' | while read filename; do
-            jq 'del(.publishConfig.provenance)' "$filename" > temp.json && mv temp.json "$filename"
-          done
-
-      - name: Commit Change
-        run: |
-          git config --global user.email "e2e@suites.dev"
-          git config --global user.name "Suites e2e"
-          git add .
-          git commit -am "remove provenance"
-
-      - name: Publish Packages
-        run: |
-          pnpm publish -r \
-            --no-git-checks \
-            --access public \
-            --tag ci \
-            --force 
-      - name: Setup and Test
-        run: |
-          IFS='/' read -r library framework <<< "${{ matrix.e2e-project }}"
-          echo "FRAMEWORK=$framework" >> $GITHUB_ENV
-          echo "LIBRARY=$library" >> $GITHUB_ENV
-
-      - name: Clean Source
-        run: |
-          rm -rf packages
-          rm -rf node_modules
-
-      - name: Install Dependencies
-        run: |
-          cd "$PWD/e2e/$LIBRARY/$FRAMEWORK"
-          npm install --no-cache --no-package-lock
-          npm install --dev --no-package-lock @types/node@${{ matrix.node-version }}
-
-      - name: Execute Test
-        run: |
-          cd "$PWD/e2e/$LIBRARY/$FRAMEWORK"
-          npm test
-
   publish:
-    name: Publish Packages
-    needs: [e2e]
+    if: github.ref == 'refs/heads/next'
+    environment: release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      APPROVED_COMMIT: ${{ inputs.commit }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Registry
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          registry-url: https://registry.npmjs.org/
-          scope: '@suites'
-          always-auth: true
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          ref: next
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify and select the exact approved commit
+        run: |
+          [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$APPROVED_COMMIT" origin/next
+          git switch --detach "$APPROVED_COMMIT"
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.4
-
-      - name: pnpm
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Publish Packages
-        run: pnpm publish -r ${{ github.event.inputs.strategy }} --access public --tag ${{ github.event.inputs.dist_tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+      - run: pnpm install --frozen-lockfile
+      - name: Audit dependencies (two approved exceptions expire October 22)
+        env:
+          AUDIT_EXCEPTIONS_EXPIRE_AT: '2026-10-22T05:37:00Z'
+        run: |
+          # Omer approved these publishing-gate exceptions on 2026-10-08.
+          # This does not approve dispatching publication, creating tags, or publishing packages.
+          # braces: CLI glob size/depth guards mitigate input; tooling remains affected.
+          # http-cache-semantics: reviewed Lerna callers use private caches on fresh runners.
+          # Remove exceptions when patched; expiry never rolls forward automatically.
+          report="$RUNNER_TEMP/dependency-audit.json"
+          audit_status=0
+          pnpm audit --json > "$report" || audit_status=$?
+          cat "$report"
+          # Registry errors, muted findings, unexpected statuses/schema must fail closed.
+          jq -e --argjson status "$audit_status" '
+            type == "object" and (has("error") | not) and .muted == [] and
+            (.advisories | type == "object") and
+            (.metadata.vulnerabilities | keys == ["critical", "high", "info", "low", "moderate"]) and
+            (.metadata.vulnerabilities | all(.[]; type == "number" and . >= 0)) and
+            (([.metadata.vulnerabilities[]] | add) == (.advisories | length)) and
+            (($status == 0 and (.advisories | length) == 0) or
+             ($status == 1 and (.advisories | length) > 0)) and
+            (.advisories | all(.[];
+              (.module_name | type == "string") and
+              (.findings | type == "array" and length > 0) and
+              (.findings | all(.[]; (.version | type == "string") and
+                (.paths | type == "array" and length > 0) and
+                (.paths | all(.[]; type == "string"))))))
+          ' "$report" > /dev/null
+          jq --arg expires "$AUDIT_EXCEPTIONS_EXPIRE_AT" --argjson now "$(date +%s)" '
+            [.advisories[] | select(
+              ($now < ($expires | fromdateiso8601) and
+                ((.github_advisory_id == "GHSA-vfj7-8cjw-p6xm" and
+                  .module_name == "braces" and all(.findings[]; .version == "3.0.3")) or
+                 (.github_advisory_id == "GHSA-ch52-4w7c-c8xp" and
+                  .module_name == "http-cache-semantics" and
+                  all(.findings[]; .version == "4.2.0" and
+                    all(.paths[]; startswith(". > lerna@9.0.7 > ")))))) | not)]
+          ' "$report" > "$RUNNER_TEMP/blocking-advisories.json"
+          if ! jq -e 'length == 0' "$RUNNER_TEMP/blocking-advisories.json" > /dev/null; then
+            cat "$RUNNER_TEMP/blocking-advisories.json"
+            echo "::error::Audit contains unapproved findings or the temporary exceptions have expired."
+            exit 1
+          fi
+          if jq -e '.advisories | length > 0' "$report" > /dev/null; then
+            echo "::warning::Audit passed with approved risk exceptions until $AUDIT_EXCEPTIONS_EXPIRE_AT; dependencies remain affected."
+            echo "Audit: temporary risk accepted for the reported braces/http-cache-semantics findings until $AUDIT_EXCEPTIONS_EXPIRE_AT. Not release approval." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - name: Verify beta metadata, immutable tags, and retry ownership
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          test -n "$NODE_AUTH_TOKEN"
+          npm_user="$(npm whoami --registry=https://registry.npmjs.org/)"
+          package_access="$(npm access list packages "$npm_user" --json)"
+          for manifest in packages/*/package.json; do
+            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))' "$manifest" > /dev/null
+            package_name="$(jq -r '.name' "$manifest")"
+            version="$(jq -r '.version' "$manifest")"
+            tag="$package_name@$version"
+            jq -e --arg name "$package_name" '.[$name] == "read-write"' <<< "$package_access" > /dev/null
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$APPROVED_COMMIT"
+            fi
+            if npm view "$package_name@$version" --json > "$RUNNER_TEMP/registry-package.json"; then
+              jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' "$RUNNER_TEMP/registry-package.json" > /dev/null
+              test "$(npm view "$package_name" dist-tags.beta)" = "$version"
+            else
+              jq -e '.error.code == "E404"' "$RUNNER_TEMP/registry-package.json" > /dev/null
+            fi
+            echo "$tag: publishing preflight passed (beta)"
+          done
+      - name: Publish only to beta, never latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm exec lerna publish from-package --yes --dist-tag beta --git-head "$APPROVED_COMMIT" --no-git-reset
+      - name: Verify published metadata (tagging remains a separate approval)
+        run: |
+          for manifest in packages/*/package.json; do
+            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
+            package_name="$(jq -r '.name' "$manifest")"
+            version="$(jq -r '.version' "$manifest")"
+            npm view "$package_name@$version" --json | jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' > /dev/null
+            test "$(npm view "$package_name" dist-tags.beta)" = "$version"
+          done
