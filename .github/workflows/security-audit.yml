@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Install dependencies for complete audit paths
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Audit dependencies (two approved exceptions expire October 22)
         env:
           AUDIT_EXCEPTIONS_EXPIRE_AT: '2026-10-22T05:37:00Z'
