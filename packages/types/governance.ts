@@ -245,6 +245,16 @@ export type ChangeType =
   | 'unknown-change';
 
 /**
+ * Whether a schema describes data accepted from or produced for a consumer.
+ *
+ * @remarks
+ * The same structural schema change can have opposite compatibility semantics
+ * for inputs and outputs. Differ implementations should set this context when
+ * they can determine the direction from the surrounding contract.
+ */
+export type SchemaDirection = 'input' | 'output';
+
+/**
  * Raw change detected by a differ before severity classification.
  *
  * @remarks
@@ -260,6 +270,8 @@ export interface RawChange {
   oldValue?: unknown;
   /** Value in new spec (undefined if removed) */
   newValue?: unknown;
+  /** Consumer-relative direction of the surrounding schema, when known */
+  schemaDirection?: SchemaDirection;
 }
 
 /**

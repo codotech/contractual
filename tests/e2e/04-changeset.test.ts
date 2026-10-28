@@ -359,4 +359,52 @@ describe('contractual changeset', () => {
       cleanup();
     }
   });
+
+  test('uses opposite severities for optional response and request properties', () => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      setupRepoWithConfig(dir, [
+        {
+          name: 'response-api',
+          type: 'openapi',
+          path: 'specs/response.yaml',
+        },
+        {
+          name: 'request-api',
+          type: 'openapi',
+          path: 'specs/request.yaml',
+        },
+      ]);
+      for (const contract of ['response-api', 'request-api']) {
+        copyFixture(
+          'openapi/required-properties-base.yaml',
+          path.join(dir, `.contractual/snapshots/${contract}.yaml`)
+        );
+      }
+      copyFixture('openapi/response-goals-optional.yaml', path.join(dir, 'specs/response.yaml'));
+      copyFixture('openapi/request-goals-optional.yaml', path.join(dir, 'specs/request.yaml'));
+      writeFile(
+        dir,
+        '.contractual/versions.json',
+        JSON.stringify({
+          'response-api': { version: '1.0.0', released: '2026-01-01T00:00:00Z' },
+          'request-api': { version: '1.0.0', released: '2026-01-01T00:00:00Z' },
+        })
+      );
+
+      const result = run('changeset', dir);
+      const changesets = listFiles(dir, '.contractual/changesets').filter((file) =>
+        file.endsWith('.md')
+      );
+      const content = readFile(dir, `.contractual/changesets/${changesets[0]}`);
+
+      expect(result.exitCode).toBe(0);
+      expect(content).toMatch(/"response-api":\s*major/);
+      expect(content).toMatch(/"request-api":\s*minor/);
+      expect(content).toMatch(/## response-api[\s\S]*\*\*\[BREAKING\]\*\*/);
+      expect(content).toMatch(/## request-api[\s\S]*\*\*\[minor\]\*\*/);
+    } finally {
+      cleanup();
+    }
+  });
 });
