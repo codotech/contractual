@@ -6,13 +6,17 @@
  * Schema-level diffing is delegated to @contractual/differs.core walker.
  */
 
-import type { RawChange, ChangeType } from '@contractual/types';
+import type { RawChange, ChangeType, SchemaDirection } from '@contractual/types';
 import { walk, escapeJsonPointer } from '@contractual/differs.core';
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'patch', 'options', 'head', 'trace'] as const;
 
 type PathsMap = Record<string, Record<string, unknown>>;
 type OperationMap = Record<string, unknown>;
+
+function withSchemaDirection(changes: RawChange[], schemaDirection: SchemaDirection): RawChange[] {
+  return changes.map((change) => ({ ...change, schemaDirection }));
+}
 
 /**
  * Diff the structural layer of two resolved OpenAPI specs
@@ -201,7 +205,7 @@ function diffParameters(oldOp: OperationMap, newOp: OperationMap, basePath: stri
           newParam.schema,
           `${basePath}/parameters/${oldParam.name}/schema`
         );
-        changes.push(...schemaChanges);
+        changes.push(...withSchemaDirection(schemaChanges, 'input'));
       }
     }
   }
@@ -265,7 +269,7 @@ function diffRequestBody(oldOp: OperationMap, newOp: OperationMap, basePath: str
 
     if (oldSchema && newSchema) {
       const schemaChanges = walk(oldSchema, newSchema, `${basePath}/requestBody/content/schema`);
-      changes.push(...schemaChanges);
+      changes.push(...withSchemaDirection(schemaChanges, 'input'));
     }
   }
 
@@ -298,7 +302,7 @@ function diffResponses(oldOp: OperationMap, newOp: OperationMap, basePath: strin
           newSchema,
           `${basePath}/responses/${statusCode}/content/schema`
         );
-        changes.push(...schemaChanges);
+        changes.push(...withSchemaDirection(schemaChanges, 'output'));
       }
     }
   }

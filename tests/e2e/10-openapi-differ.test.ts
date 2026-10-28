@@ -244,4 +244,68 @@ describe('OpenAPI differ (native)', () => {
       cleanup();
     }
   });
+
+  test('exits with failure when a required response property becomes optional', () => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      setupRepoWithConfig(dir, [
+        {
+          name: 'agents',
+          type: 'openapi',
+          path: 'specs/agents.yaml',
+        },
+      ]);
+      copyFixture(
+        'openapi/required-properties-base.yaml',
+        path.join(dir, '.contractual/snapshots/agents.yaml')
+      );
+      copyFixture('openapi/response-goals-optional.yaml', path.join(dir, 'specs/agents.yaml'));
+      writeFile(
+        dir,
+        '.contractual/versions.json',
+        JSON.stringify({ agents: { version: '1.0.0', released: '2026-01-01T00:00:00Z' } })
+      );
+
+      const result = run('breaking --format json', dir, { expectFail: true });
+      const output = JSON.parse(result.stdout);
+
+      expect(result.exitCode).toBe(1);
+      expect(output.hasBreaking).toBe(true);
+      expect(output.results[0].suggestedBump).toBe('major');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('succeeds when a required request property becomes optional', () => {
+    const { dir, cleanup } = createTempRepo();
+    try {
+      setupRepoWithConfig(dir, [
+        {
+          name: 'agents',
+          type: 'openapi',
+          path: 'specs/agents.yaml',
+        },
+      ]);
+      copyFixture(
+        'openapi/required-properties-base.yaml',
+        path.join(dir, '.contractual/snapshots/agents.yaml')
+      );
+      copyFixture('openapi/request-goals-optional.yaml', path.join(dir, 'specs/agents.yaml'));
+      writeFile(
+        dir,
+        '.contractual/versions.json',
+        JSON.stringify({ agents: { version: '1.0.0', released: '2026-01-01T00:00:00Z' } })
+      );
+
+      const result = run('breaking --format json', dir);
+      const output = JSON.parse(result.stdout);
+
+      expect(result.exitCode).toBe(0);
+      expect(output.hasBreaking).toBe(false);
+      expect(output.results[0].suggestedBump).toBe('minor');
+    } finally {
+      cleanup();
+    }
+  });
 });

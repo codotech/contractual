@@ -5,8 +5,8 @@
  * Supports OpenAPI 3.0 and 3.1.
  */
 
-import type { DiffResult } from '@contractual/types';
-import { assembleResult } from '@contractual/differs.core';
+import type { ChangeSeverity, DiffResult, RawChange } from '@contractual/types';
+import { assembleResult, classify, classifyPropertyAdded } from '@contractual/differs.core';
 import { resolveOpenApiSpec } from './resolver.js';
 import { diffStructural } from './structural.js';
 
@@ -36,5 +36,23 @@ export function diffOpenApiObjects(
   newSpec: Record<string, unknown>
 ): DiffResult {
   const rawChanges = diffStructural(oldSpec, newSpec);
-  return assembleResult(rawChanges, newSpec);
+  return assembleResult(rawChanges, newSpec, { classifyFn: classifyOpenApiChange });
+}
+
+function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSeverity {
+  if (change.schemaDirection === 'output') {
+    if (change.type === 'required-removed') {
+      return 'breaking';
+    }
+
+    if (change.type === 'required-added') {
+      return 'non-breaking';
+    }
+  }
+
+  if (change.type === 'property-added') {
+    return classifyPropertyAdded(change, newSpec);
+  }
+
+  return classify(change);
 }
