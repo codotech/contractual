@@ -72,25 +72,15 @@ jobs:
       - run: pnpm test
       - run: pnpm test:e2e
       - name: Verify beta metadata, immutable tags, and retry ownership
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          test -n "$NODE_AUTH_TOKEN"
-          npm_user="$(npm whoami --registry=https://registry.npmjs.org/)"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
           for manifest in packages/*/package.json; do
             if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
             jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))' "$manifest" > /dev/null
             package_name="$(jq -r '.name' "$manifest")"
             version="$(jq -r '.version' "$manifest")"
             tag="$package_name@$version"
-            if ! package_access="$(npm access list collaborators "$package_name" "$npm_user" --json --registry=https://registry.npmjs.org/)"; then
-              echo "::error::Cannot read npm permissions for $package_name."
-              exit 1
-            fi
-            if ! jq -e --arg user "$npm_user" 'type == "object" and .[$user] == "read-write"' <<< "$package_access" > /dev/null; then
-              echo "::error::npm account $npm_user does not have write access to $package_name."
-              exit 1
-            fi
             if git show-ref --verify --quiet "refs/tags/$tag"; then
               test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$APPROVED_COMMIT"
             fi
@@ -102,9 +92,7 @@ jobs:
             fi
             echo "$tag: publishing preflight passed (beta)"
           done
-      - name: Publish only to beta, never latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to beta with npm Trusted Publishing
         run: pnpm exec lerna publish from-package --yes --dist-tag beta --git-head "$APPROVED_COMMIT" --no-git-reset
       - name: Verify published metadata (tagging remains a separate approval)
         run: |
