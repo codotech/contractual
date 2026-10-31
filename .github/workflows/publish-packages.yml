@@ -159,9 +159,13 @@ jobs:
                     "$RUNNER_TEMP/published-dist-tags.json" > /dev/null
                   if jq -e --argjson beta "$expected_beta" '(.beta // null) == $beta' \
                     "$RUNNER_TEMP/published-dist-tags.json" > /dev/null; then
-                    break
-                  fi
-                  if [[ "$disposition" != publish ]]; then
+                    if npm pack "$package_name@$version" --ignore-scripts --json --prefer-online \
+                      --pack-destination "$RUNNER_TEMP" > "$RUNNER_TEMP/published-tarball.json"; then
+                      break
+                    fi
+                    test "$disposition" = publish
+                    jq -e '.error.code == "E404"' "$RUNNER_TEMP/published-tarball.json" > /dev/null
+                  elif [[ "$disposition" != publish ]]; then
                     echo "::error::The beta tag changed for preserved package $package_name."
                     exit 1
                   fi
@@ -176,7 +180,7 @@ jobs:
                 jq -e '.error.code == "E404"' "$RUNNER_TEMP/published-package.json" > /dev/null
               fi
               if (( SECONDS >= verification_deadline )); then
-                echo "::error::Timed out waiting for npm visibility of $package_name@$version and its beta tag. Check the registry before retrying publication."
+                echo "::error::Timed out waiting for npm visibility of $package_name@$version, its beta tag, and its tarball. Check the registry before retrying publication."
                 exit 1
               fi
               echo "$package_name@$version: waiting for npm registry visibility; retrying read-only verification in 10 seconds."
