@@ -24,7 +24,20 @@ Lerna lists all public packages and runs the signing command for each missing `<
 
 Existing tags remain immutable, including their signatures. An independent package may keep its older tag if that tag points to an ancestor of the approved commit and the package directory is unchanged. A changed package with an existing version fails with a request to prepare a new version. An existing global tag must point to the exact approved commit. The run summary lists newly signed tags and preserved tags separately. Re-running a completed batch creates no additional tags.
 
-Historical unsigned tags are not converted into signed tags. Also, the publishing workflow currently requires all existing package tags to point to its approved commit. Resolve that version/tag compatibility before requesting publication; successful tagging alone does not establish that a release can be published.
+Historical unsigned tags are not converted into signed tags. Package versions and tags are independent: a CLI release can advance to `0.1.0-beta.2` while `types` retains `0.1.0-beta.1` and its original tag.
+
+## Publish independent versions
+
+**Prepare Release** uses Lerna's independent versioning to update changed packages and affected dependents. **Sign and Push Release Tags** tags the versions recorded in the reviewed commit. **Publish Packages** uses `lerna publish from-package` to publish versions missing from npm. A global tag is an optional repository milestone; it does not set every package's version.
+
+The publish preflight checks each package separately:
+
+- An existing package tag may point to an older ancestor commit if that package directory is unchanged.
+- An existing npm version is preserved if its `gitHead` is an ancestor of the approved commit with identical package contents. Its existing `beta` distribution tag is preserved, even if that tag points to another version or is absent.
+- A missing npm version is published from the approved commit under `beta`. Its npm `gitHead` records that publishing commit, which can be newer than an unchanged package's original Git tag.
+- Changed contents under an existing version, unrelated source history, missing source metadata, and registry failures stop publication. Only an explicit registry `E404` permits a new publication.
+
+The workflow records these decisions before publishing and verifies each package against its own expected commit and distribution tag afterward. A retry skips versions already published successfully; when all versions exist, the publish step is skipped entirely. No version bumps, tag moves, or distribution-tag repairs happen implicitly.
 
 ### Configure signing once
 
