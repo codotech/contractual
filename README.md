@@ -1,173 +1,111 @@
+<p align="center">
+  <img width="100" src="logo.png" alt="Contractual" />
+</p>
+
 <h1 align="center">Contractual</h1>
 
-Contractual is a tool for managing API and data schemas as structured contracts. It ensures that schemas
-are defined, versioned, and enforced across teams, whether for REST APIs, event-driven systems, or structured data
-exchanges.
-
-Common use cases include: \
-🔹 Keeping API Contracts in Sync Between Backend and Frontend \
-🔹 Generating Type-Safe Clients and Server Contracts \
-🔹 Preventing Breaking Changes and Detecting Schema Drift \
-🔹 Ensuring Consistency Between Backend and Data Teams \
-🔹 Generating Language-Specific Types from a Shared Contract
-
-By treating schemas as first-class entities, Contractual eliminates uncertainty at integration points, enabling backend,
-frontend, and data engineering teams to maintain predictable and enforceable APIs and structured data across the entire
-stack.
-
-> Initially built for the **Node.js and TypeScript ecosystem**, Contractual is planned to support additional
-> languages.
-
-## 🚀 In Practice
-
-### Install Contractual
-
-To get started, install the Contractual CLI globally:
-
-```bash
-npm i -g @contractual/cli
-```
-
-### Initialize Your Project
-
-Run the `init` command to scaffold a new project:
-
-```bash
-contractual init
-```
-
-This command creates the following project structure:
-
-```
-frontend/          # Your frontend application
-server/            # Your server application
-contractual/       # Contractual files
-├── api.tsp        # TypeSpec API definition
-├── specs/         # OpenAPI auto-generated specs
-```
-
-> Contractual works seamlessly with **monorepos**, **monoliths**, and distributed repositories.
-
-### Define Your API
-
-Write your API definition in the `api.tsp` file. For example:
-
-```tsp
-import "@typespec/http";
-import "@typespec/openapi";
-import "@typespec/openapi3";
-
-using TypeSpec.Http;
-
-@service({
-  title: "Petstore API",
-})
-namespace PetstoreAPI;
-
-model Pet {
-  id: string;
-  name: string;
-}
-
-@route("/pet")
-@post
-op addPet(@body body: Pet): Pet;
-```
-
-> You can experiment and validate your API definitions [using the TypeSpec playground](https://typespec.io/playground/)
-
-### Manage API Changes
-
-#### Save the Current State of Your API
-
-Run the `spec graduate` command to save the current state of your OpenAPI spec:
-
-```bash
-contractual spec graduate
-```
-
-This will generate a new OpenAPI (3.1.0) YAML file with versioning, enabling to track API changes over time. The
-updated structure will look like this:
-
-```
-contractual/
-├── api.tsp                  # TypeSpec API definition
-├── specs/                   # OpenAPI auto-generated specs
-│   ├── openapi-v1.0.0.yaml
-client/                      # Generated API clients
-server/                      # Server contracts
-e2e/                         # Type-safe API-driven tests
-```
-
-> You can track API evolution and changes easily with clear, versioned OpenAPI specs.
-
-Here’s a quick video showing how this works:
+<p align="center">
+Schema contract lifecycle for OpenAPI and JSON Schema
+<br />
+Linting • Breaking change detection • Versioning • Release automation
+</p>
 
 <div align="center">
-  <img src="spec-graduate.gif" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license" /></a>
+  <a href="https://github.com/codotech/contractual/blob/next/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome" /></a>
+  <a href="https://npmjs.org/package/@contractual/cli"><img src="https://img.shields.io/npm/dm/@contractual/cli.svg?label=%40contractual%2Fcli" alt="npm downloads" /></a>
 </div>
 
-### Generate Contracts
+<h3 align="center">
+  <a href="https://contractual.dev">Docs</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://contractual.dev/getting-started/quickstart">Quickstart</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://contractual.dev/breaking/overview">Breaking Detection</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="https://contractual.dev/github-action/setup">GitHub Action</a>
+</h3>
 
-Run the `contract generate` command to generate type-safe clients, server contracts, and updated OpenAPI specs:
+<p align="center">
+<strong>Supported Formats:</strong> <a href="https://www.openapis.org/">OpenAPI</a>, <a href="https://json-schema.org/">JSON Schema</a>
+</p>
+
+## Features
+
+- **Structural Breaking Change Detection** - Compares specs against versioned snapshots using structural diffing, not string comparison. Catches removed fields, type changes, and endpoint deletions.
+
+- **Automated Versioning** - Changesets declare bump levels (major/minor/patch). `contractual version` consumes them, bumps versions, updates snapshots, and generates changelogs.
+
+- **CI Integration** - GitHub Action posts diff tables on PRs, auto-generates changesets, and opens Version PRs for release automation.
+
+- **Format Agnostic** - Works with OpenAPI and JSON Schema. Custom linters and differs can be configured per contract.
+
+## Quick Example
+
+### Detect changes
 
 ```bash
-contractual contract generate
+$ contractual diff
+
+orders-api: 3 changes (2 breaking, 1 non-breaking) — suggested bump: major
+
+  BREAKING     Removed endpoint GET /orders/{id}/details
+  BREAKING     Changed type of field 'amount': string → number
+  non-breaking Added optional field 'tracking_url'
 ```
 
-This command creates:
+### Generate a changeset
 
-- **Type-safe client libraries** [using **ts-rest**](https://ts-rest.com), integrated with **Zod** for runtime
-  validation.
-- **Server contracts** for frameworks like **Express**, **Fastify**, and **NestJS**.
-- **Updated OpenAPI specs**.
+```bash
+$ contractual changeset
 
-Here’s a short video showing contract generation in action:
+? Bump type for orders-api: major
+? Summary: Remove deprecated endpoint, change amount type
 
-<div align="center">
-  <img src="contract-generate.gif" />
-</div>
+Wrote .contractual/changesets/fuzzy-lion-dances.md
 ```
 
-## 🔍 Why Contractual?
+### Bump versions
 
-Maintaining the consistency of schemas across various services presents significant challenges. As systems evolve,
-type-definitions and schemas drift, unnoticed breaking changes occur, and different teams find it challenging to
-synchronize. APIs, event schemas, and structured data formats often become disconnected from their original intent,
-leading to brittle integrations, manual fixes, and unexpected failures.
+```bash
+$ contractual version
 
-**Some of the biggest pain points teams face include:**
+orders-api  1.4.2 → 2.0.0 (major)
 
-- **Schema Drift & Misalignment:** APIs and data contracts become inconsistent across teams, leading to mismatches, broken integrations, and regressions.
+Updated .contractual/versions.json
+Updated CHANGELOG.md
+```
 
-- **Untracked Changes & Breaking Updates:** Without tracking modifications, updates can unexpectedly break consumers, causing downtime and costly debugging.
+## Installation
 
-- **Scattered Schemas & Code Maintenance:** Outdated documentation and manually managed type definitions create unreliable integrations and make maintaining entity models error-prone.
+Development releases are currently available under the npm `dev` tag. There is no stable release yet. Built-in linting and diffing support OpenAPI and JSON Schema; AsyncAPI and ODCS require custom engines. AI, fixed versioning, and generation hooks are planned. See [release scope](RELEASING.md) and [contributing](CONTRIBUTING.md).
 
-## 🔑 The Contract-First Approach
-Most teams take a **code-first** approach to API development, where schemas are generated after implementation. This often results in **misalignment between services, outdated documentation, and accidental breaking changes.** Backend teams define APIs, frontend teams consume them, and data engineers rely on structured data formats—all of which can drift over time when schemas are an afterthought.
+```bash
+npm install -g @contractual/cli@dev
+```
 
-A **contract-first** approach flips this process: schemas are designed before any implementation begins, ensuring that API structures, event definitions, and data formats remain stable and predictable. This approach allows teams to:
+Or with other package managers:
 
-- Define schemas upfront and enforce them as the single source of truth.
+```bash
+pnpm add -g @contractual/cli@dev
+yarn global add @contractual/cli@dev
+```
 
-- Track changes and prevent breaking updates before they impact consumers.
+## Getting Started
 
-- Generate type-safe clients and server contracts in multiple languages, reducing friction between teams.
+1. **Initialize** - `contractual init` scans for specs and creates `contractual.yaml`
+2. **Lint** - `contractual lint` validates specs
+3. **Detect changes** - `contractual diff` shows all changes classified
+4. **CI gate** - `contractual breaking` fails if breaking changes exist
+5. **Version** - `contractual changeset` + `contractual version` for releases
 
-## 📘 Roadmap
+[→ Full Quickstart Guide](https://contractual.dev/getting-started/quickstart)
 
-Want to contribute? Check out the alpha version [Roadmap](https://github.com/contractual-dev/contractual/issues/8) and
-join the journey! 🚀
+## Community
 
-## ❤️ Join the Community
+- [Documentation](https://contractual.dev)
+- [GitHub Issues](https://github.com/codotech/contractual/issues)
 
-Contractual is open-source, and we’re looking for contributors to help shape its future, if you’re interested in
-collaborating, please reach out.
+## License
 
-📩 **Feedback or Questions?** Reach out
-via [GitHub Discussions](https://github.com/contractual-dev/contractual/discussions).
-
-## 🔒 License
-
-Licensed under [MIT](LICENSE).
+[MIT](LICENSE)

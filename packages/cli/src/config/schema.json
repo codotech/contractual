@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contractual.dev/schemas/config.json",
+  "title": "Contractual Configuration",
+  "description": "Configuration file for Contractual schema contract lifecycle orchestrator",
+  "type": "object",
+  "required": ["contracts"],
+  "properties": {
+    "contracts": {
+      "type": "array",
+      "description": "List of contract definitions",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "path"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique identifier for the contract",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of schema",
+            "enum": ["openapi", "json-schema", "asyncapi", "odcs"]
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to spec file (can be glob pattern)"
+          },
+          "lint": {
+            "oneOf": [
+              { "type": "string", "description": "Linter tool name or custom command" },
+              { "type": "boolean", "const": false, "description": "Disable linting" }
+            ]
+          },
+          "breaking": {
+            "oneOf": [
+              { "type": "string", "description": "Differ tool name or custom command" },
+              { "type": "boolean", "const": false, "description": "Disable breaking change detection" }
+            ]
+          },
+          "syncVersion": {
+            "type": "boolean",
+            "description": "Sync version field inside the spec file on version bump (default: true). Set to false to skip.",
+            "default": true
+          },
+          "generate": {
+            "type": "array",
+            "description": "Output generation commands",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "versioning": {
+      "type": "object",
+      "description": "Versioning configuration",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["independent", "fixed"],
+          "description": "Versioning mode: independent (each contract separate) or fixed (all share same version)",
+          "default": "independent"
+        }
+      },
+      "additionalProperties": false
+    },
+    "changeset": {
+      "type": "object",
+      "description": "Changeset behavior configuration",
+      "properties": {
+        "autoDetect": {
+          "type": "boolean",
+          "description": "Auto-detect change classifications",
+          "default": true
+        },
+        "requireOnPR": {
+          "type": "boolean",
+          "description": "Require changeset for spec changes in PRs",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ai": {
+      "type": "object",
+      "description": "AI/LLM integration configuration",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["anthropic"],
+          "default": "anthropic"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model to use"
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "explain": {
+              "type": "boolean",
+              "description": "PR change explanations",
+              "default": true
+            },
+            "changelog": {
+              "type": "boolean",
+              "description": "AI-enriched changelog entries",
+              "default": true
+            },
+            "enhance": {
+              "type": "boolean",
+              "description": "Spec metadata enhancement",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

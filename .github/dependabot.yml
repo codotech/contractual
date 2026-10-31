@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    # The default branch is next. Omit target-branch so security groups apply too.
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "fix(*)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+    versioning-strategy: increase
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
