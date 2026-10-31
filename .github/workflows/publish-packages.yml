@@ -16,6 +16,9 @@ jobs:
     if: github.ref == 'refs/heads/next'
     environment: release
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     permissions:
       id-token: write
       contents: read
@@ -71,35 +74,79 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm test:e2e
-      - name: Verify beta metadata, immutable tags, and retry ownership
+      - name: Plan independent package publication
+        id: publication
         run: |
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          plan="$RUNNER_TEMP/package-publication.jsonl"
+          : > "$plan"
+          pending=0
           for manifest in packages/*/package.json; do
             if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
             jq -e '.repository.url == "https://github.com/codotech/contractual.git" and .publishConfig.access == "public" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$"))' "$manifest" > /dev/null
             package_name="$(jq -r '.name' "$manifest")"
             version="$(jq -r '.version' "$manifest")"
+            package_path="${manifest%/package.json}"
             tag="$package_name@$version"
             if git show-ref --verify --quiet "refs/tags/$tag"; then
-              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$APPROVED_COMMIT"
+              tagged_commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+              if ! git merge-base --is-ancestor "$tagged_commit" "$APPROVED_COMMIT" ||
+                 ! git diff --quiet "$tagged_commit" "$APPROVED_COMMIT" -- "$package_path"; then
+                echo "::error::$tag conflicts with the approved package contents. Prepare a new version; existing tags are immutable."
+                exit 1
+              fi
             fi
             if npm view "$package_name@$version" --json > "$RUNNER_TEMP/registry-package.json"; then
-              jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' "$RUNNER_TEMP/registry-package.json" > /dev/null
-              test "$(npm view "$package_name" dist-tags.beta)" = "$version"
+              jq -e --arg name "$package_name" --arg version "$version" '
+                (has("error") | not) and .name == $name and .version == $version and
+                (.gitHead | type == "string" and test("^[0-9a-f]{40}$"))
+              ' "$RUNNER_TEMP/registry-package.json" > /dev/null
+              published_commit="$(jq -r '.gitHead' "$RUNNER_TEMP/registry-package.json")"
+              if ! git cat-file -e "$published_commit^{commit}" ||
+                 ! git merge-base --is-ancestor "$published_commit" "$APPROVED_COMMIT" ||
+                 ! git diff --quiet "$published_commit" "$APPROVED_COMMIT" -- "$package_path"; then
+                echo "::error::$tag is already published from different package contents or unrelated history. Prepare a new version."
+                exit 1
+              fi
+              npm view "$package_name" dist-tags --json > "$RUNNER_TEMP/registry-dist-tags.json"
+              jq -e 'type == "object" and (has("error") | not) and all(.[]; type == "string")' "$RUNNER_TEMP/registry-dist-tags.json" > /dev/null
+              expected_beta="$(jq -c '.beta // null' "$RUNNER_TEMP/registry-dist-tags.json")"
+              expected_commit="$published_commit"
+              disposition=preserve
             else
+              # Only an explicit registry E404 means this version can be published.
               jq -e '.error.code == "E404"' "$RUNNER_TEMP/registry-package.json" > /dev/null
+              expected_commit="$APPROVED_COMMIT"
+              expected_beta="$(jq -cn --arg version "$version" '$version')"
+              disposition=publish
+              pending=$((pending + 1))
             fi
-            echo "$tag: publishing preflight passed (beta)"
+            jq -cn --arg name "$package_name" --arg version "$version" \
+              --arg git_head "$expected_commit" --arg disposition "$disposition" \
+              --argjson beta "$expected_beta" \
+              '{name: $name, version: $version, gitHead: $git_head, disposition: $disposition, beta: $beta}' >> "$plan"
+            echo "$tag: $disposition"
           done
-      - name: Publish to beta with npm Trusted Publishing
+          test -s "$plan"
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+      - name: Publish missing versions to beta with npm Trusted Publishing
+        if: steps.publication.outputs.pending != '0'
         run: pnpm exec lerna publish from-package --yes --dist-tag beta --git-head "$APPROVED_COMMIT" --no-git-reset
-      - name: Verify published metadata (tagging remains a separate approval)
+      - name: Verify each package against its publication plan
         run: |
-          for manifest in packages/*/package.json; do
-            if jq -e '.private == true' "$manifest" > /dev/null; then continue; fi
-            package_name="$(jq -r '.name' "$manifest")"
-            version="$(jq -r '.version' "$manifest")"
-            npm view "$package_name@$version" --json | jq -e --arg sha "$APPROVED_COMMIT" '.gitHead == $sha' > /dev/null
-            test "$(npm view "$package_name" dist-tags.beta)" = "$version"
-          done
+          while IFS= read -r entry; do
+            package_name="$(jq -r '.name' <<< "$entry")"
+            version="$(jq -r '.version' <<< "$entry")"
+            expected_commit="$(jq -r '.gitHead' <<< "$entry")"
+            expected_beta="$(jq -c '.beta' <<< "$entry")"
+            disposition="$(jq -r '.disposition' <<< "$entry")"
+            npm view "$package_name@$version" --json |
+              jq -e --arg name "$package_name" --arg version "$version" --arg sha "$expected_commit" \
+                '.name == $name and .version == $version and .gitHead == $sha' > /dev/null
+            npm view "$package_name" dist-tags --json |
+              jq -e --argjson beta "$expected_beta" \
+                'type == "object" and (has("error") | not) and (.beta // null) == $beta' > /dev/null
+            printf '\n- `%s@%s`: %s, verified at `%s`\n' \
+              "$package_name" "$version" "$disposition" "$expected_commit" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/package-publication.jsonl"
