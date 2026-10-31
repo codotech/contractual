@@ -37,7 +37,7 @@ The publish preflight checks each package separately:
 - A missing npm version is published from the approved commit under `beta`. Its npm `gitHead` records that publishing commit, which can be newer than an unchanged package's original Git tag.
 - Changed contents under an existing version, unrelated source history, missing source metadata, and registry failures stop publication. Only an explicit registry `E404` permits a new publication.
 
-The workflow records these decisions before publishing and verifies each package against its own expected commit and distribution tag afterward. A retry skips versions already published successfully; when all versions exist, the publish step is skipped entirely. No version bumps, tag moves, or distribution-tag repairs happen implicitly.
+The workflow records these decisions before publishing and verifies each package against its own expected commit and distribution tag afterward. New uploads may take time to become visible on npm. Verification refreshes registry metadata and retries missing new versions, delayed new `beta` tags, or unavailable new tarballs for up to ten minutes across the batch. It never retries uploads. Wrong source commits, changes to preserved versions, and registry errors other than `E404` still fail immediately. A retry skips versions already published successfully; when all versions exist, the publish step is skipped entirely. No version bumps, tag moves, or distribution-tag repairs happen implicitly.
 
 ### Configure signing once
 

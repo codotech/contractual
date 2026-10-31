@@ -134,19 +134,58 @@ jobs:
         if: steps.publication.outputs.pending != '0'
         run: pnpm exec lerna publish from-package --yes --dist-tag beta --git-head "$APPROVED_COMMIT" --no-git-reset
       - name: Verify each package against its publication plan
+        env:
+          NPM_CONFIG_FETCH_RETRIES: '0'
+          NPM_CONFIG_FETCH_TIMEOUT: '10000'
         run: |
+          verification_deadline=$((SECONDS + 600))
           while IFS= read -r entry; do
             package_name="$(jq -r '.name' <<< "$entry")"
             version="$(jq -r '.version' <<< "$entry")"
             expected_commit="$(jq -r '.gitHead' <<< "$entry")"
             expected_beta="$(jq -c '.beta' <<< "$entry")"
             disposition="$(jq -r '.disposition' <<< "$entry")"
-            npm view "$package_name@$version" --json |
-              jq -e --arg name "$package_name" --arg version "$version" --arg sha "$expected_commit" \
-                '.name == $name and .version == $version and .gitHead == $sha' > /dev/null
-            npm view "$package_name" dist-tags --json |
-              jq -e --argjson beta "$expected_beta" \
-                'type == "object" and (has("error") | not) and (.beta // null) == $beta' > /dev/null
+            while true; do
+              if npm view "$package_name@$version" --json --prefer-online > "$RUNNER_TEMP/published-package.json"; then
+                # A visible version with unexpected ownership is never a visibility retry.
+                if ! jq -e --arg name "$package_name" --arg version "$version" --arg sha "$expected_commit" \
+                  '.name == $name and .version == $version and .gitHead == $sha' \
+                  "$RUNNER_TEMP/published-package.json" > /dev/null; then
+                  echo "::error::$package_name@$version has unexpected package identity or gitHead."
+                  exit 1
+                fi
+                if npm view "$package_name" dist-tags --json --prefer-online > "$RUNNER_TEMP/published-dist-tags.json"; then
+                  jq -e 'type == "object" and (has("error") | not) and all(.[]; type == "string")' \
+                    "$RUNNER_TEMP/published-dist-tags.json" > /dev/null
+                  if jq -e --argjson beta "$expected_beta" '(.beta // null) == $beta' \
+                    "$RUNNER_TEMP/published-dist-tags.json" > /dev/null; then
+                    if npm pack "$package_name@$version" --ignore-scripts --json --prefer-online \
+                      --pack-destination "$RUNNER_TEMP" > "$RUNNER_TEMP/published-tarball.json"; then
+                      break
+                    fi
+                    test "$disposition" = publish
+                    jq -e '.error.code == "E404"' "$RUNNER_TEMP/published-tarball.json" > /dev/null
+                  elif [[ "$disposition" != publish ]]; then
+                    echo "::error::The beta tag changed for preserved package $package_name."
+                    exit 1
+                  fi
+                else
+                  test "$disposition" = publish
+                  jq -e '.error.code == "E404"' "$RUNNER_TEMP/published-dist-tags.json" > /dev/null
+                fi
+              else
+                # New uploads can return E404 briefly before npm exposes the version.
+                # Authentication, server errors, and missing preserved versions still fail.
+                test "$disposition" = publish
+                jq -e '.error.code == "E404"' "$RUNNER_TEMP/published-package.json" > /dev/null
+              fi
+              if (( SECONDS >= verification_deadline )); then
+                echo "::error::Timed out waiting for npm visibility of $package_name@$version, its beta tag, and its tarball. Check the registry before retrying publication."
+                exit 1
+              fi
+              echo "$package_name@$version: waiting for npm registry visibility; retrying read-only verification in 10 seconds."
+              sleep 10
+            done
             printf '\n- `%s@%s`: %s, verified at `%s`\n' \
               "$package_name" "$version" "$disposition" "$expected_commit" >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/package-publication.jsonl"
