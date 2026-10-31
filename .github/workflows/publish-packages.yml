@@ -21,6 +21,7 @@ jobs:
       contents: read
     env:
       APPROVED_COMMIT: ${{ inputs.commit }}
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,7 +40,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org/
       - run: pnpm install --frozen-lockfile
       - name: Audit dependencies
         run: |
@@ -53,7 +53,7 @@ jobs:
             (.advisories | type == "object") and
             (.metadata.vulnerabilities | keys == ["critical", "high", "info", "low", "moderate"]) and
             (.metadata.vulnerabilities | all(.[]; type == "number" and . >= 0)) and
-            (([.metadata.vulnerabilities[]] | add) == (.advisories | length)) and
+            (([.metadata.vulnerabilities[]] | add) == ([.advisories[].findings | length] | add // 0)) and
             (($status == 0 and (.advisories | length) == 0) or
              ($status == 1 and (.advisories | length) > 0)) and
             (.advisories | all(.[];
