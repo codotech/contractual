@@ -138,7 +138,7 @@ jobs:
           NPM_CONFIG_FETCH_RETRIES: '0'
           NPM_CONFIG_FETCH_TIMEOUT: '10000'
         run: |
-          verification_deadline=$((SECONDS + 300))
+          verification_deadline=$((SECONDS + 600))
           while IFS= read -r entry; do
             package_name="$(jq -r '.name' <<< "$entry")"
             version="$(jq -r '.version' <<< "$entry")"
