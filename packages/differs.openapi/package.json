@@ -19,7 +19,7 @@
     "directory": "packages/differs.openapi"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "prebuild": "rimraf dist",
@@ -32,7 +32,7 @@
   "dependencies": {
     "@contractual/differs.core": "workspace:*",
     "@contractual/types": "workspace:*",
-    "@redocly/openapi-core": "^1.34.20"
+    "@redocly/openapi-core": "^2.72.1"
   },
   "devDependencies": {
     "rimraf": "^6.1.3",
