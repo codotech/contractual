@@ -1,0 +1,51 @@
+name: Release Preview
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: Use preminor to enter beta, prerelease for the next beta
+        type: choice
+        options: [preminor, prerelease]
+        default: preminor
+        required: true
+      preid:
+        description: Prerelease identifier
+        type: choice
+        options: [beta]
+        default: beta
+        required: true
+permissions:
+  contents: read
+jobs:
+  preview:
+    name: Preview Release
+    if: github.ref == 'refs/heads/next'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: next
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Deliberately do not read or write caches in release workflows.
+      - run: pnpm install --frozen-lockfile
+      - name: Preview versions without commits, tags, or publication
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          PREID: ${{ inputs.preid }}
+        run: |
+          test "$PREID" = beta
+          case "$RELEASE_TYPE" in preminor|prerelease) ;; *) exit 1 ;; esac
+          pnpm exec lerna version "$RELEASE_TYPE" --preid "$PREID" --conventional-commits --yes --no-git-tag-version --no-push --no-commit-hooks --ignore-scripts --allow-branch next
+          pnpm install --lockfile-only --ignore-scripts
+      - name: Summarize local preview
+        run: |
+          echo '## Proposed versions (preview only)' >> "$GITHUB_STEP_SUMMARY"
+          pnpm exec lerna ls --json | jq -r '.[] | "- **\(.name)**: \(.version)"' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No commits, tags, or packages were published. Ask Omer before preparing or publishing a release.' >> "$GITHUB_STEP_SUMMARY"

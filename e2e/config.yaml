@@ -1,0 +1,24 @@
+storage: /verdaccio/storage
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  '@contractual/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+  '**':
+    access: $all
+    publish: $all
+    proxy: npmjs
+
+auth:
+  htpasswd:
+    file: ./htpasswd
+    algorithm: bcrypt
+    rounds: 10
+
+logs:
+  - { type: stdout, format: pretty, level: http }

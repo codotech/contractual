@@ -1,0 +1,158 @@
+name: E2E Release Simulation
+env:
+  CI: true
+
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        description: 'Branch to test release from'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to test release from'
+        required: true
+        type: string
+        default: 'next'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: github.ref == 'refs/heads/next'
+    name: E2E (${{ matrix.e2e-project }}, Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        e2e-project: ['cli-basic', 'cli-lifecycle', 'packages-import']
+        node-version: [22.x, 24.x, 26.x]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: next
+          fetch-depth: 0
+
+      - name: Setup Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Verdaccio
+        run: docker compose -f local-e2e.docker-compose.yaml up -d verdaccio
+
+      - name: Wait for Verdaccio
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:4873 > /dev/null; then
+              echo "Verdaccio is ready"
+              break
+            fi
+            echo "Waiting for Verdaccio..."
+            sleep 1
+          done
+
+      - name: Build
+        run: pnpm build
+
+      - name: Setup Registry
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: http://localhost:4873
+          scope: '@contractual'
+          always-auth: false
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Config Git
+        run: |
+          git config --global user.email "e2e@contractual.dev"
+          git config --global user.name "Contractual e2e"
+
+      - name: Remove provenance from package.json files
+        run: |
+          find packages -name 'package.json' | while read filename; do
+            jq 'del(.publishConfig.provenance)' "$filename" > temp.json && mv temp.json "$filename"
+          done
+
+      - name: Commit Provenance Removal
+        run: |
+          git add .
+          git commit -am "chore: remove provenance for e2e"
+
+      - name: Version Packages
+        run: |
+          BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+          npx lerna version --yes \
+          --conventional-commits \
+          --conventional-prerelease \
+          --preid e2e \
+          --no-changelog \
+          --allow-branch "$BRANCH_NAME" \
+          --no-git-tag-version \
+          --no-push \
+          --force-publish \
+          --no-commit-hooks
+
+      - name: Commit Packages Versions
+        run: |
+          git add .
+          git commit -am "bump versions"
+
+      - name: Capture Versions for Report
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** \`${{ matrix.e2e-project }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Node:** \`${{ matrix.node-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Versions:" >> $GITHUB_STEP_SUMMARY
+          lerna ls --json | jq -r '.[] | "- **\(.name)** -> `v\(.version)`"' >> $GITHUB_STEP_SUMMARY
+
+      - name: Publish Packages to Verdaccio
+        run: |
+          npx lerna publish from-package --yes \
+          --no-git-tag-version \
+          --no-push \
+          --no-git-reset \
+          --exact \
+          --dist-tag e2e
+
+      - name: Clean Source (simulate fresh install)
+        run: |
+          rm -rf packages
+          rm -rf node_modules
+          rm pnpm-lock.yaml
+          rm package.json
+          rm -f .npmrc
+
+      - name: Install E2E Dependencies from Verdaccio
+        run: |
+          cd "${{ github.workspace }}/e2e/${{ matrix.e2e-project }}"
+          npm install --registry http://localhost:4873 --no-package-lock
+
+      - name: Execute Tests
+        run: |
+          cd "${{ github.workspace }}/e2e/${{ matrix.e2e-project }}"
+          npm test
+
+      - name: Test Success Summary
+        if: success()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Passed" >> $GITHUB_STEP_SUMMARY
+          echo "Packages work correctly when published" >> $GITHUB_STEP_SUMMARY
