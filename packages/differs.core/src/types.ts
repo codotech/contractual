@@ -318,7 +318,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     const aKeys = Object.keys(aObj);
     const bKeys = Object.keys(bObj);
     if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((key) => deepEqual(aObj[key], bObj[key]));
+    return aKeys.every((key) => Object.hasOwn(bObj, key) && deepEqual(aObj[key], bObj[key]));
   }
 
   return false;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { assembleResult, walk } from '@contractual/differs.core';
+import { assembleResult, deepEqual, walk } from '@contractual/differs.core';
 import { diffOpenApiObjects } from './differ.js';
 import { diffStructural } from './structural.js';
 
@@ -407,4 +407,35 @@ test('arrays and objects with numeric keys are different enum values', () => {
   const changes = walk(before, after);
   expect(changes.every((change) => change.enumConstraintEquivalent === undefined)).toBe(true);
   expect(assembleResult(changes, after).suggestedBump).toBe('major');
+});
+
+test('JSON object equality requires matching own keys, including __proto__', () => {
+  const ownPrototypeKey = JSON.parse('{"__proto__":{}}');
+  const differentKey = JSON.parse('{"different":"value"}');
+  for (const [left, right] of [
+    [ownPrototypeKey, differentKey],
+    [differentKey, ownPrototypeKey],
+  ]) {
+    expect(deepEqual(left, right)).toBe(false);
+    for (const [before, after] of [
+      [{ const: left }, { enum: [right] }],
+      [{ enum: [left] }, { const: right }],
+    ]) {
+      const changes = walk(before, after);
+      expect(changes.every((change) => change.enumConstraintEquivalent === undefined)).toBe(true);
+      expect(assembleResult(changes, after).suggestedBump).toBe('major');
+    }
+  }
+
+  const sameLeft = JSON.parse('{"__proto__":{},"nested":{"a":1,"b":[2]}}');
+  const sameRight = JSON.parse('{"nested":{"b":[2],"a":1},"__proto__":{}}');
+  for (const [left, right] of [
+    [sameLeft, sameRight],
+    [sameRight, sameLeft],
+  ]) {
+    expect(deepEqual(left, right)).toBe(true);
+    expect(
+      assembleResult(walk({ const: left }, { enum: [right] }), { enum: [right] }).suggestedBump
+    ).toBe('minor');
+  }
 });
