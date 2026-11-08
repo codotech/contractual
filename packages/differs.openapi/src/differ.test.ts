@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { assembleResult, walk } from '@contractual/differs.core';
 import { diffOpenApiObjects } from './differ.js';
 import { diffStructural } from './structural.js';
 
@@ -182,4 +183,92 @@ describe('OpenAPI enum compatibility direction', () => {
       expect(result.suggestedBump).toBe(breaking ? 'major' : 'minor');
     });
   });
+});
+
+describe('OpenAPI enum constraint interactions', () => {
+  test.each(['request', 'response'] as const)(
+    '%s const removal is retained when an enum is added',
+    (direction) => {
+      const oldSpec = openApiSpec(direction, false, { const: 'a' });
+      const newSpec = openApiSpec(direction, false, { enum: ['a', 'b'] });
+      const rawChanges = diffStructural(oldSpec, newSpec);
+      expect(rawChanges).toEqual([
+        expect.objectContaining({ type: 'enum-added', newValue: ['a', 'b'] }),
+        expect.objectContaining({
+          type: 'enum-removed',
+          oldValue: 'a',
+          path: expect.stringMatching(/\/const$/),
+        }),
+      ]);
+      const result = diffOpenApiObjects(oldSpec, newSpec);
+      expect(result.changes).toContainEqual(
+        expect.objectContaining({
+          category: direction === 'response' ? 'enum-removed' : 'enum-added',
+          severity: 'breaking',
+        })
+      );
+      expect(result.suggestedBump).toBe('major');
+    }
+  );
+
+  test('enum removal does not hide a simultaneous const replacement', () => {
+    const result = diffOpenApiObjects(
+      openApiSpec('response', false, { enum: ['a', 'b'], const: 'a' }),
+      openApiSpec('response', false, { const: 'c' })
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ category: 'enum-removed', severity: 'breaking' }),
+      expect.objectContaining({
+        category: 'enum-value-removed',
+        oldValue: 'a',
+        newValue: 'c',
+        severity: 'breaking',
+      }),
+    ]);
+    expect(result.suggestedBump).toBe('major');
+  });
+
+  test.each(['request', 'response'] as const)(
+    '%s enum changes inside overlapping oneOf branches require a major bump',
+    (direction) => {
+      const before = {
+        oneOf: [
+          { type: 'string', enum: ['a', 'b'] },
+          { type: 'string', enum: ['b'] },
+        ],
+      };
+      const after = {
+        oneOf: [
+          { type: 'string', enum: ['a'] },
+          { type: 'string', enum: ['b'] },
+        ],
+      };
+      for (const [oldSchema, newSchema] of [
+        [before, after],
+        [after, before],
+      ]) {
+        const result = diffOpenApiObjects(
+          openApiSpec(direction, false, oldSchema),
+          openApiSpec(direction, false, newSchema)
+        );
+        expect(result.changes).toEqual([
+          expect.objectContaining({
+            severity: 'breaking',
+            path: expect.stringContaining('/oneOf/0/enum'),
+          }),
+        ]);
+        expect(result.suggestedBump).toBe('major');
+      }
+    }
+  );
+});
+
+test('enum removal retains a simultaneous const addition for input compatibility', () => {
+  const changes = walk({ type: 'string', enum: ['a', 'b'] }, { type: 'string', const: 'a' });
+
+  expect(changes).toEqual([
+    { path: '/enum', type: 'enum-removed', oldValue: ['a', 'b'], newValue: undefined },
+    { path: '/const', type: 'enum-added', oldValue: undefined, newValue: 'a' },
+  ]);
+  expect(assembleResult(changes, { type: 'string', const: 'a' }).suggestedBump).toBe('major');
 });

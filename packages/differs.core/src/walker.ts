@@ -390,7 +390,6 @@ function compareEnum(
       oldValue: undefined,
       newValue: newEnum,
     });
-    return changes;
   }
 
   // Enum removed
@@ -401,7 +400,6 @@ function compareEnum(
       oldValue: oldEnum,
       newValue: undefined,
     });
-    return changes;
   }
 
   // Both have enums - compare values
