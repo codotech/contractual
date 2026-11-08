@@ -41,6 +41,25 @@ export function diffOpenApiObjects(
 
 function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSeverity {
   if (change.schemaDirection === 'output') {
+    // Responses must remain valid against the schema known to existing clients.
+    // A const replacement is disjoint, rather than a narrowing: the walker
+    // represents it as enum-value-removed with both values populated.
+    if (
+      change.type === 'enum-value-removed' &&
+      change.path.endsWith('/const') &&
+      change.newValue !== undefined
+    ) {
+      return 'breaking';
+    }
+
+    if (change.type === 'enum-value-added' || change.type === 'enum-removed') {
+      return 'breaking';
+    }
+
+    if (change.type === 'enum-value-removed' || change.type === 'enum-added') {
+      return 'non-breaking';
+    }
+
     if (change.type === 'required-removed') {
       return 'breaking';
     }
