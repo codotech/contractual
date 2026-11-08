@@ -78,17 +78,17 @@ Updated CHANGELOG.md
 
 ## Installation
 
-Development releases are currently available under the npm `dev` tag. There is no stable release yet. Built-in linting and diffing support OpenAPI and JSON Schema; AsyncAPI and ODCS require custom engines. AI, fixed versioning, and generation hooks are planned. See [release scope](RELEASING.md) and [contributing](CONTRIBUTING.md).
+Beta releases are currently available under the npm `beta` tag. There is no stable release yet. Built-in linting and diffing support OpenAPI and JSON Schema; AsyncAPI and ODCS require custom engines. AI, fixed versioning, and generation hooks are planned. See [release scope](RELEASING.md) and [contributing](CONTRIBUTING.md).
 
 ```bash
-npm install -g @contractual/cli@dev
+npm install -g @contractual/cli@beta
 ```
 
 Or with other package managers:
 
 ```bash
-pnpm add -g @contractual/cli@dev
-yarn global add @contractual/cli@dev
+pnpm add -g @contractual/cli@beta
+yarn global add @contractual/cli@beta
 ```
 
 ## Getting Started
