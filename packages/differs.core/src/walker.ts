@@ -457,7 +457,24 @@ function compareEnum(
     }
   }
 
-  return changes;
+  // Prove equivalence where both schemas are available, rather than pairing
+  // unrelated raw changes later by their potentially shared display paths.
+  const constToEnum =
+    oldEnum === undefined &&
+    oldSchema.const !== undefined &&
+    newSchema.const === undefined &&
+    newEnum?.length === 1 &&
+    deepEqual(oldSchema.const, newEnum[0]);
+  const enumToConst =
+    newEnum === undefined &&
+    newSchema.const !== undefined &&
+    oldSchema.const === undefined &&
+    oldEnum?.length === 1 &&
+    deepEqual(oldEnum[0], newSchema.const);
+
+  return constToEnum || enumToConst
+    ? changes.map((change) => ({ ...change, enumConstraintEquivalent: true }))
+    : changes;
 }
 
 /**

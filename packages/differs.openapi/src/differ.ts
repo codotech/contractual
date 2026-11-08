@@ -40,6 +40,8 @@ export function diffOpenApiObjects(
 }
 
 function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSeverity {
+  if (change.enumConstraintEquivalent) return 'non-breaking';
+
   // oneOf accepts exactly one matching branch. Either narrowing or widening
   // a branch can invalidate old inputs or introduce outputs old clients reject.
   // Without proving branch disjointness, treat enum changes conservatively.

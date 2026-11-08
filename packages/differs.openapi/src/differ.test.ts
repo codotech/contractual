@@ -272,3 +272,139 @@ test('enum removal retains a simultaneous const addition for input compatibility
   ]);
   expect(assembleResult(changes, { type: 'string', const: 'a' }).suggestedBump).toBe('major');
 });
+
+describe('equivalent singleton enum and const substitutions', () => {
+  test.each(['request', 'response'] as const)(
+    '%s substitutions preserve the value set',
+    (direction) => {
+      for (const value of ['a', null, { nested: ['a'] }]) {
+        const schemaType =
+          value === null ? 'null' : typeof value === 'object' ? 'object' : 'string';
+        const schemas = [
+          { type: schemaType, enum: [value] },
+          { type: schemaType, const: value },
+        ];
+        for (const [oldSchema, newSchema] of [schemas, [...schemas].reverse()]) {
+          const oldSpec = openApiSpec(direction, false, oldSchema);
+          const newSpec = openApiSpec(direction, false, newSchema);
+          expect(diffStructural(oldSpec, newSpec)).toHaveLength(2);
+          const result = diffOpenApiObjects(oldSpec, newSpec);
+          expect(result.changes).toHaveLength(2);
+          expect(result.changes.every((change) => change.severity === 'non-breaking')).toBe(true);
+          expect(result.suggestedBump).toBe('minor');
+          expect(assembleResult(walk(oldSchema, newSchema), newSchema).suggestedBump).toBe('minor');
+        }
+      }
+    }
+  );
+
+  test('equivalent substitutions remain compatible inside oneOf', () => {
+    const before = { oneOf: [{ const: 'a' }, { const: 'b' }] };
+    const after = { oneOf: [{ enum: ['a'] }, { const: 'b' }] };
+    for (const direction of ['request', 'response'] as const) {
+      const result = diffOpenApiObjects(
+        openApiSpec(direction, false, before),
+        openApiSpec(direction, false, after)
+      );
+      expect(result.changes).toHaveLength(2);
+      expect(result.changes.every((change) => change.severity === 'non-breaking')).toBe(true);
+      expect(result.suggestedBump).toBe('minor');
+    }
+  });
+
+  test('different singleton values still require a major bump', () => {
+    for (const [oldSchema, newSchema] of [
+      [{ const: 'a' }, { enum: ['b'] }],
+      [{ enum: ['a'] }, { const: 'b' }],
+    ]) {
+      for (const direction of ['request', 'response'] as const) {
+        expect(
+          diffOpenApiObjects(
+            openApiSpec(direction, false, oldSchema),
+            openApiSpec(direction, false, newSchema)
+          ).suggestedBump
+        ).toBe('major');
+      }
+      expect(assembleResult(walk(oldSchema, newSchema), newSchema).suggestedBump).toBe('major');
+    }
+  });
+});
+
+test('parameter names cannot imitate oneOf schema paths', () => {
+  function spec(values: string[]) {
+    return {
+      openapi: '3.1.0',
+      info: { title: 'Parameters', version: '1.0.0' },
+      paths: {
+        '/example': {
+          get: {
+            parameters: [
+              { in: 'query', name: 'x/oneOf/0/x~y', schema: { type: 'string', enum: values } },
+            ],
+            responses: { 200: { description: 'OK' } },
+          },
+        },
+      },
+    };
+  }
+  const result = diffOpenApiObjects(spec(['a']), spec(['a', 'b']));
+  expect(result.changes).toEqual([
+    expect.objectContaining({
+      category: 'enum-value-added',
+      severity: 'non-breaking',
+      path: '/paths/~1example/get/parameters/x~1oneOf~10~1x~0y/schema/enum',
+    }),
+  ]);
+  expect(result.suggestedBump).toBe('minor');
+});
+
+test('same-name parameters do not share equivalence evidence', () => {
+  function spec(querySchema: Record<string, unknown>, headerSchema: Record<string, unknown>) {
+    return {
+      openapi: '3.1.0',
+      info: { title: 'Parameters', version: '1.0.0' },
+      paths: {
+        '/example': {
+          get: {
+            parameters: [
+              { in: 'query', name: 'x', schema: querySchema },
+              { in: 'header', name: 'x', schema: headerSchema },
+            ],
+            responses: { 200: { description: 'OK' } },
+          },
+        },
+      },
+    };
+  }
+  const result = diffOpenApiObjects(spec({ enum: ['a'] }, {}), spec({}, { const: 'a' }));
+  expect(result.changes).toContainEqual(
+    expect.objectContaining({ category: 'enum-added', severity: 'breaking' })
+  );
+  expect(result.suggestedBump).toBe('major');
+});
+
+test('object const equivalence ignores key order', () => {
+  const before = { const: { a: 1, b: 2 } };
+  const after = { enum: [{ b: 2, a: 1 }] };
+  expect(assembleResult(walk(before, after), after).suggestedBump).toBe('minor');
+});
+
+test('coexisting enum and const constraints are not treated as substitutions', () => {
+  const before = { enum: ['a'], const: 'b' };
+  const after = { enum: ['a'] };
+  for (const change of walk(before, after)) expect(change.enumConstraintEquivalent).toBeUndefined();
+  expect(
+    diffOpenApiObjects(
+      openApiSpec('response', false, before),
+      openApiSpec('response', false, after)
+    ).suggestedBump
+  ).toBe('major');
+});
+
+test('arrays and objects with numeric keys are different enum values', () => {
+  const before = { const: ['a'] };
+  const after = { enum: [{ 0: 'a' }] };
+  const changes = walk(before, after);
+  expect(changes.every((change) => change.enumConstraintEquivalent === undefined)).toBe(true);
+  expect(assembleResult(changes, after).suggestedBump).toBe('major');
+});

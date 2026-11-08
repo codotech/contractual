@@ -181,7 +181,7 @@ function diffParameters(oldOp: OperationMap, newOp: OperationMap, basePath: stri
   for (const [key, oldParam] of oldByKey) {
     if (!newByKey.has(key)) {
       changes.push({
-        path: `${basePath}/parameters/${oldParam.name}`,
+        path: `${basePath}/parameters/${escapeJsonPointer(String(oldParam.name))}`,
         type: 'parameter-removed' as ChangeType,
         oldValue: key,
       });
@@ -191,7 +191,7 @@ function diffParameters(oldOp: OperationMap, newOp: OperationMap, basePath: stri
       // Check required change
       if (oldParam.required !== newParam.required) {
         changes.push({
-          path: `${basePath}/parameters/${oldParam.name}/required`,
+          path: `${basePath}/parameters/${escapeJsonPointer(String(oldParam.name))}/required`,
           type: 'parameter-required-changed' as ChangeType,
           oldValue: oldParam.required,
           newValue: newParam.required,
@@ -203,7 +203,7 @@ function diffParameters(oldOp: OperationMap, newOp: OperationMap, basePath: stri
         const schemaChanges = walk(
           oldParam.schema,
           newParam.schema,
-          `${basePath}/parameters/${oldParam.name}/schema`
+          `${basePath}/parameters/${escapeJsonPointer(String(oldParam.name))}/schema`
         );
         changes.push(...withSchemaDirection(schemaChanges, 'input'));
       }
@@ -215,7 +215,7 @@ function diffParameters(oldOp: OperationMap, newOp: OperationMap, basePath: stri
       // Required parameter added = breaking, optional = non-breaking
       // Store required flag in newValue so classifiers can check
       changes.push({
-        path: `${basePath}/parameters/${newParam.name}`,
+        path: `${basePath}/parameters/${escapeJsonPointer(String(newParam.name))}`,
         type: newParam.required
           ? ('parameter-required-added' as ChangeType)
           : ('parameter-added' as ChangeType),

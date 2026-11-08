@@ -184,6 +184,8 @@ export const CLASSIFICATION_SETS = {
  * ```
  */
 export function classify(change: RawChange): ChangeSeverity {
+  if (change.enumConstraintEquivalent) return 'non-breaking';
+
   const { type } = change;
 
   // Check each category in order of specificity
