@@ -4,11 +4,15 @@ import { diffStructural } from './structural.js';
 
 type SchemaDirection = 'request' | 'response';
 
-function openApiSpec(direction: SchemaDirection, goalsRequired: boolean): Record<string, unknown> {
+function openApiSpec(
+  direction: SchemaDirection,
+  goalsRequired: boolean,
+  idConstraint: Record<string, unknown> = {}
+): Record<string, unknown> {
   const schema = {
     type: 'object',
     properties: {
-      id: { type: 'string' },
+      id: { type: 'string', ...idConstraint },
       goals: { type: 'array', items: { type: 'string' } },
     },
     required: goalsRequired ? ['id', 'goals'] : ['id'],
@@ -101,5 +105,81 @@ describe('OpenAPI required-property compatibility direction', () => {
     expect(changes).toEqual([
       expect.objectContaining({ type: 'required-removed', schemaDirection }),
     ]);
+  });
+});
+
+describe('OpenAPI enum compatibility direction', () => {
+  const cases = [
+    {
+      name: 'enum widening',
+      old: { enum: ['a'] },
+      next: { enum: ['a', 'b'] },
+      category: 'enum-value-added',
+      inputBreaking: false,
+    },
+    {
+      name: 'enum narrowing',
+      old: { enum: ['a', 'b'] },
+      next: { enum: ['a'] },
+      category: 'enum-value-removed',
+      inputBreaking: true,
+    },
+    {
+      name: 'enum constraint addition',
+      old: {},
+      next: { enum: ['a'] },
+      category: 'enum-added',
+      inputBreaking: true,
+    },
+    {
+      name: 'enum constraint removal',
+      old: { enum: ['a'] },
+      next: {},
+      category: 'enum-removed',
+      inputBreaking: false,
+    },
+    {
+      name: 'const addition',
+      old: {},
+      next: { const: 'a' },
+      category: 'enum-added',
+      inputBreaking: true,
+    },
+    {
+      name: 'const removal',
+      old: { const: 'a' },
+      next: {},
+      category: 'enum-removed',
+      inputBreaking: false,
+    },
+    {
+      name: 'const replacement',
+      old: { const: 'a' },
+      next: { const: 'b' },
+      category: 'enum-value-removed',
+      inputBreaking: true,
+    },
+    {
+      name: 'null const replacement',
+      old: { type: ['string', 'null'], const: 'a' },
+      next: { type: ['string', 'null'], const: null },
+      category: 'enum-value-removed',
+      inputBreaking: true,
+    },
+  ];
+
+  describe.each(['request', 'response'] as const)('%s', (direction) => {
+    test.each(cases)('$name', ({ name, old, next, category, inputBreaking }) => {
+      const breaking =
+        name.includes('replacement') || (direction === 'request' ? inputBreaking : !inputBreaking);
+      const result = diffOpenApiObjects(
+        openApiSpec(direction, false, old),
+        openApiSpec(direction, false, next)
+      );
+      expect(result.changes).toEqual([
+        expect.objectContaining({ category, severity: breaking ? 'breaking' : 'non-breaking' }),
+      ]);
+      expect(result.suggestedBump).toBe(breaking ? 'major' : 'minor');
+    });
   });
 });
