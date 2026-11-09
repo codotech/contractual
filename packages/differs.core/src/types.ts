@@ -23,13 +23,7 @@ export { CHANGE_TYPE_SEVERITY } from '@contractual/types';
  * JSON Schema type values
  */
 export type JSONSchemaType =
-  | 'string'
-  | 'number'
-  | 'integer'
-  | 'boolean'
-  | 'object'
-  | 'array'
-  | 'null';
+  'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array' | 'null';
 
 /**
  * Normalized type representation (always an array for comparison)
@@ -311,6 +305,8 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 
   if (a === null || b === null) return a === b;
 
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
     return a.every((val, idx) => deepEqual(val, b[idx]));
@@ -322,7 +318,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     const aKeys = Object.keys(aObj);
     const bKeys = Object.keys(bObj);
     if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((key) => deepEqual(aObj[key], bObj[key]));
+    return aKeys.every((key) => Object.hasOwn(bObj, key) && deepEqual(aObj[key], bObj[key]));
   }
 
   return false;

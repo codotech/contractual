@@ -272,6 +272,8 @@ export interface RawChange {
   newValue?: unknown;
   /** Consumer-relative direction of the surrounding schema, when known */
   schemaDirection?: SchemaDirection;
+  /** Walker proved an exclusive const/singleton-enum substitution preserves accepted values. */
+  enumConstraintEquivalent?: boolean;
 }
 
 /**
