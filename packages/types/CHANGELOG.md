@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0-beta.2](https://github.com/codotech/contractual/compare/%40contractual%2Ftypes%400.1.0-beta.1...%40contractual%2Ftypes%400.1.0-beta.2) (2026-11-09)
+
+### Bug Fixes
+
+* **differs.openapi:** account for enum constraint interactions ([#60](https://github.com/codotech/contractual/issues/60)) ([be669cf](https://github.com/codotech/contractual/commit/be669cf4649b8569af922d644de545d803edbf5f)), closes [#59](https://github.com/codotech/contractual/issues/59)
+
+
 # [0.1.0-beta.1](https://github.com/codotech/contractual/compare/@contractual/types@0.1.0-dev.5...@contractual/types@0.1.0-beta.1) (2026-10-29)
 
 
