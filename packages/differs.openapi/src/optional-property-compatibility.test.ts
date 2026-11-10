@@ -4,9 +4,9 @@ import { diffOpenApiObjects } from './differ.js';
 type Schema = Record<string, unknown>;
 type Direction = 'request' | 'response';
 
-function spec(direction: Direction, schema: Schema): Record<string, unknown> {
+function spec(direction: Direction, schema: Schema, openapi = '3.1.0'): Record<string, unknown> {
   return {
-    openapi: '3.1.0',
+    openapi,
     info: { title: 'Optional property compatibility', version: '1.0.0' },
     paths: {
       '/tasks': {
@@ -336,5 +336,106 @@ test('negated property changes retain conservative classification', () => {
   const result = diffOpenApiObjects(spec('request', oldSchema), spec('request', newSchema));
   expect(result.changes).toEqual([
     expect.objectContaining({ category: 'not-schema-changed', severity: 'breaking' }),
+  ]);
+});
+
+describe('property additions respect OpenAPI nullable semantics', () => {
+  test.each([
+    {
+      name: 'request loses previously allowed null',
+      direction: 'request' as const,
+      oldNullable: true,
+      newNullable: false,
+      severity: 'breaking',
+    },
+    {
+      name: 'response introduces a previously forbidden null',
+      direction: 'response' as const,
+      oldNullable: false,
+      newNullable: true,
+      severity: 'breaking',
+    },
+    {
+      name: 'request permits additional null values',
+      direction: 'request' as const,
+      oldNullable: false,
+      newNullable: true,
+      severity: 'non-breaking',
+    },
+    {
+      name: 'response no longer returns null',
+      direction: 'response' as const,
+      oldNullable: true,
+      newNullable: false,
+      severity: 'non-breaking',
+    },
+    {
+      name: 'equal nullable constraints preserve compatibility',
+      direction: 'request' as const,
+      oldNullable: true,
+      newNullable: true,
+      severity: 'non-breaking',
+    },
+  ])('$name', ({ direction, oldNullable, newNullable, severity }) => {
+    const oldSchema = {
+      type: 'object',
+      additionalProperties: { type: 'string', ...(oldNullable ? { nullable: true } : {}) },
+    };
+    const newSchema = {
+      ...oldSchema,
+      properties: { value: { type: 'string', ...(newNullable ? { nullable: true } : {}) } },
+    };
+    const result = diffOpenApiObjects(
+      spec(direction, oldSchema, '3.0.3'),
+      spec(direction, newSchema, '3.0.3')
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ category: 'property-added', severity }),
+    ]);
+  });
+
+  test.each(['request', 'response'] as const)(
+    '3.1 nullable does not widen the %s type',
+    (direction) => {
+      const oldSchema = { type: 'object', additionalProperties: { type: 'string' } };
+      const newSchema = { ...oldSchema, properties: { value: { type: 'string', nullable: true } } };
+      expect(
+        diffOpenApiObjects(spec(direction, oldSchema), spec(direction, newSchema)).summary.breaking
+      ).toBe(0);
+    }
+  );
+
+  test('nullable does not override enum constraints', () => {
+    const oldSchema = { type: 'object', additionalProperties: { enum: ['a'] } };
+    const newSchema = {
+      ...oldSchema,
+      properties: { value: { type: 'string', nullable: true, enum: ['a'] } },
+    };
+    expect(
+      diffOpenApiObjects(spec('response', oldSchema, '3.0.3'), spec('response', newSchema, '3.0.3'))
+        .summary.breaking
+    ).toBe(0);
+  });
+
+  test('nullable without a local type does not introduce a type restriction', () => {
+    const oldSchema = { type: 'object' };
+    const newSchema = { ...oldSchema, properties: { value: { nullable: true } } };
+    expect(
+      diffOpenApiObjects(spec('request', oldSchema, '3.0.3'), spec('request', newSchema, '3.0.3'))
+        .summary.breaking
+    ).toBe(0);
+  });
+});
+
+test('a dialect change cannot prove equal nested nullable schemas compatible', () => {
+  const value = { type: 'object', properties: { nested: { type: 'string', nullable: true } } };
+  const oldSchema = { type: 'object', additionalProperties: value };
+  const newSchema = { ...oldSchema, properties: { value } };
+  const result = diffOpenApiObjects(
+    spec('request', oldSchema, '3.0.3'),
+    spec('request', newSchema, '3.1.0')
+  );
+  expect(result.changes).toEqual([
+    expect.objectContaining({ category: 'property-added', severity: 'breaking' }),
   ]);
 });

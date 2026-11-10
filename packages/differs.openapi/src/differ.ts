@@ -37,10 +37,20 @@ export function diffOpenApiObjects(
   newSpec: Record<string, unknown>
 ): DiffResult {
   const rawChanges = diffStructural(oldSpec, newSpec);
-  return assembleResult(rawChanges, newSpec, { classifyFn: classifyOpenApiChange });
+  const oldUsesNullable = typeof oldSpec.openapi === 'string' && oldSpec.openapi.startsWith('3.0.');
+  const newUsesNullable = typeof newSpec.openapi === 'string' && newSpec.openapi.startsWith('3.0.');
+  return assembleResult(rawChanges, newSpec, {
+    classifyFn: (change, schema) =>
+      classifyOpenApiChange(change, schema, oldUsesNullable, newUsesNullable),
+  });
 }
 
-function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSeverity {
+function classifyOpenApiChange(
+  change: RawChange,
+  newSpec: unknown,
+  oldUsesNullable: boolean,
+  newUsesNullable: boolean
+): ChangeSeverity {
   if (change.enumConstraintEquivalent) return 'non-breaking';
 
   // oneOf accepts exactly one matching branch. Either narrowing or widening
@@ -80,7 +90,8 @@ function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSever
   }
 
   if (change.type === 'property-added') {
-    if (change.propertyAddition) return classifyPropertyAddition(change);
+    if (change.propertyAddition)
+      return classifyPropertyAddition(change, oldUsesNullable, newUsesNullable);
     return classifyPropertyAdded(change, newSpec);
   }
 
