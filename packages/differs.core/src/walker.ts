@@ -151,6 +151,16 @@ function walkInternal(
   // 18. Composition changes (anyOf, oneOf, allOf, if/then/else, not)
   changes.push(...compareComposition(old, newS, path, depth));
 
+  // Declaring a property changes evaluation annotations, which an ancestor's
+  // unevaluated* keyword can observe even when its own text is unchanged.
+  if (
+    old.unevaluatedProperties !== undefined ||
+    newS.unevaluatedProperties !== undefined ||
+    old.unevaluatedItems !== undefined ||
+    newS.unevaluatedItems !== undefined
+  ) {
+    return uncertainPropertyAdditions(changes);
+  }
   return changes;
 }
 
@@ -667,6 +677,7 @@ function compareProperties(
         type: 'property-added',
         oldValue: undefined,
         newValue: newProps[key],
+        propertyAddition: { name: key, oldParent: oldSchema, newParent: newSchema },
       });
     }
   }
@@ -1099,7 +1110,11 @@ function compareArrayItems(
           joinPath(path, 'contains'),
           depth + 1
         );
-        changes.push(...nestedChanges);
+        changes.push(
+          ...(oldSchema.maxContains !== undefined || newSchema.maxContains !== undefined
+            ? uncertainPropertyAdditions(nestedChanges)
+            : nestedChanges)
+        );
       } else {
         changes.push({
           path: joinPath(path, 'contains'),
@@ -1375,7 +1390,7 @@ function compareOneOf(
         joinPath(path, 'oneOf', String(newIdx)),
         depth + 1
       );
-      changes.push(...nestedChanges);
+      changes.push(...uncertainPropertyAdditions(nestedChanges));
     }
   }
 
@@ -1590,4 +1605,13 @@ function matchCompositionOptions(
   }
 
   return { matched, removed, added };
+}
+
+/** Local subset proofs are not sufficient inside non-monotonic applicators. */
+function uncertainPropertyAdditions(changes: RawChange[]): RawChange[] {
+  return changes.map((change) =>
+    change.propertyAddition
+      ? { ...change, propertyAddition: { ...change.propertyAddition, uncertain: true } }
+      : change
+  );
 }

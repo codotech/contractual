@@ -9,6 +9,7 @@ import type { ChangeSeverity, DiffResult, RawChange } from '@contractual/types';
 import { assembleResult, classify, classifyPropertyAdded } from '@contractual/differs.core';
 import { resolveOpenApiSpec } from './resolver.js';
 import { diffStructural } from './structural.js';
+import { classifyPropertyAddition } from './property-addition.js';
 
 /**
  * Diff two OpenAPI specification files
@@ -79,6 +80,7 @@ function classifyOpenApiChange(change: RawChange, newSpec: unknown): ChangeSever
   }
 
   if (change.type === 'property-added') {
+    if (change.propertyAddition) return classifyPropertyAddition(change);
     return classifyPropertyAdded(change, newSpec);
   }
 
