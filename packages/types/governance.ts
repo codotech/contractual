@@ -274,6 +274,16 @@ export interface RawChange {
   schemaDirection?: SchemaDirection;
   /** Walker proved an exclusive const/singleton-enum substitution preserves accepted values. */
   enumConstraintEquivalent?: boolean;
+  /** Local context for a newly declared named property; not a display-path lookup. */
+  propertyAddition?: {
+    name: string;
+    oldParent: Record<string, unknown>;
+    newParent: Record<string, unknown>;
+    /** Ancestor evaluation/composition prevents a local compatibility proof. */
+    uncertain?: boolean;
+    /** Explicit dialect declarations on enclosing old/new schemas. */
+    schemaDialects?: unknown[];
+  };
 }
 
 /**
