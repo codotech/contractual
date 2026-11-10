@@ -1,0 +1,60 @@
+openapi: 3.1.0
+info:
+  title: Circular Refs API
+  version: 1.0.0
+paths:
+  /categories:
+    get:
+      operationId: listCategories
+      summary: List categories (tree structure with circular refs)
+      responses:
+        "200":
+          description: A list of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+  /nodes:
+    get:
+      operationId: listNodes
+      summary: List nodes (linked list with circular refs)
+      responses:
+        "200":
+          description: A list of nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Node'
+components:
+  schemas:
+    Category:
+      type: object
+      required:
+      - id
+      - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        parent:
+          $ref: '#/components/schemas/Category'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+    Node:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: integer
+        value:
+          type: string
+        next:
+          $ref: '#/components/schemas/Node'

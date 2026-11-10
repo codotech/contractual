@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/order.schema.json",
+  "title": "Order",
+  "description": "An order in the system",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique order identifier"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "processing", "shipped", "delivered"],
+      "description": "Current order status"
+    },
+    "amount": {
+      "type": "string",
+      "description": "Order total amount as string"
+    },
+    "currency": {
+      "type": "string",
+      "format": "iso-4217",
+      "description": "Currency code (ISO 4217)"
+    },
+    "items": {
+      "type": "array",
+      "description": "Line items in the order",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "price": {
+            "type": "string"
+          }
+        },
+        "required": ["sku", "quantity", "price"]
+      }
+    },
+    "shipping_address": {
+      "type": "object",
+      "description": "Shipping address",
+      "properties": {
+        "street": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "zip": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "country": {
+          "type": "string"
+        }
+      },
+      "required": ["street", "city", "zip", "country"]
+    },
+    "customer_email": {
+      "type": "string",
+      "format": "email",
+      "description": "Customer email address"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional order notes",
+      "maxLength": 500
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Order creation timestamp"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata",
+      "additionalProperties": true
+    }
+  },
+  "required": ["id", "status", "amount", "currency", "items", "created_at"],
+  "additionalProperties": false
+}

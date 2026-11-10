@@ -1,0 +1,109 @@
+openapi: 3.1.0
+info:
+  title: Petstore - OpenAPI 3.1
+  summary: A sample petstore using OpenAPI 3.1 features
+  license:
+    name: MIT
+    identifier: MIT
+  version: 1.0.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+- url: /api/v3
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          exclusiveMaximum: 100
+      # NON-BREAKING: new optional query parameter
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+        default:
+          description: unexpected error
+    post:
+      operationId: createPet
+      summary: Create a pet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPet'
+      responses:
+        "201":
+          description: Pet created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+  /pets/{petId}:
+    get:
+      operationId: getPetById
+      summary: Get a pet by ID
+      parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        "404":
+          description: Pet not found
+components:
+  schemas:
+    Pet:
+      type: object
+      required:
+      - id
+      - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type:
+          - string
+          - "null"
+        status:
+          type: string
+          enum:
+          - available
+          - pending
+          - sold
+    NewPet:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        tag:
+          type:
+          - string
+          - "null"

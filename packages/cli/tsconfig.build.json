@@ -3,16 +3,14 @@
   "compilerOptions": {
     "rootDir": "src",
     "baseUrl": ".",
-    "outDir": "dist",
-    "esModuleInterop": true,
+    "outDir": "dist"
   },
+  "include": ["src/**/*"],
   "exclude": [
-    "index.ts",
     "dist",
     "node_modules",
     "test",
     "**/*.spec.ts",
-    "**/*.test.ts",
-    "jest.config.ts"
+    "**/*.test.ts"
   ]
 }

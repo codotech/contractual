@@ -1,33 +1,199 @@
-name: Tag and Push
+name: Sign and Push Release Tags
 
 on:
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: 'Tag Name (e.g. v1.0.0)'
+      commit:
+        description: Full reviewed commit SHA on next, explicitly approved by Omer
         required: true
+        type: string
+      tag_name:
+        description: Optional approved global beta tag (e.g. v0.1.0-beta.3); package tags are always included
+        required: false
+        type: string
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   tag-and-push:
-    name: Tag and Push
+    if: github.ref == 'refs/heads/next'
+    environment: release
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+    env:
+      APPROVED_COMMIT: ${{ inputs.commit }}
+      GLOBAL_TAG: ${{ inputs.tag_name }}
+      RELEASE_GPG_FINGERPRINT: ${{ vars.RELEASE_GPG_FINGERPRINT }}
+      RELEASE_GIT_NAME: ${{ vars.RELEASE_GIT_NAME }}
+      RELEASE_GIT_EMAIL: ${{ vars.RELEASE_GIT_EMAIL }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
+          ref: next
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Config Git
+      - name: Select the approved release commit
         run: |
-          git config --global user.email "omer.moradd@gmail.com"
-          git config --global user.name "Omer Morad"
+          echo "GNUPGHOME=$RUNNER_TEMP/release-tag-gnupg" >> "$GITHUB_ENV"
+          if [[ ! "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::Supply the full approved commit SHA.'
+            exit 1
+          fi
+          git merge-base --is-ancestor "$APPROVED_COMMIT" origin/next
+          git switch --detach "$APPROVED_COMMIT"
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          if [[ -n "$GLOBAL_TAG" ]]; then
+            if [[ ! "$GLOBAL_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+              echo '::error::The optional global tag must have the form vX.Y.Z-beta.N.'
+              exit 1
+            fi
+            git check-ref-format "refs/tags/$GLOBAL_TAG"
+          fi
 
-      - name: Tag and Push
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Plan all package tags with Lerna
+        id: plan
         run: |
-          git tag -a ${{ inputs.tag_name }} -m "Tag Version ${{ inputs.tag_name }}"
-          git push origin ${{ inputs.tag_name }}
+          pnpm exec lerna list --json --no-private > "$RUNNER_TEMP/release-packages.json"
+          jq -e --arg root "$GITHUB_WORKSPACE/packages/" '
+            type == "array" and length > 0 and
+            all(.[]; .private == false and
+              (.name | test("^@contractual/[a-z.-]+$")) and
+              (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$")) and
+              (.location | startswith($root)))
+          ' "$RUNNER_TEMP/release-packages.json" > /dev/null
+          jq -r '.[] | [.name, .version, .location] | @tsv' \
+            "$RUNNER_TEMP/release-packages.json" > "$RUNNER_TEMP/release-packages.tsv"
+          : > "$RUNNER_TEMP/new-release-tags.txt"
+          : > "$RUNNER_TEMP/existing-release-tags.tsv"
+          while IFS=$'\t' read -r package_name version location; do
+            tag="$package_name@$version"
+            git check-ref-format "refs/tags/$tag"
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              tagged_commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+              package_path="${location#"$GITHUB_WORKSPACE/"}"
+              # Independent packages can retain their original version and tag.
+              # Reusing that version after changing its package must fail.
+              if ! git merge-base --is-ancestor "$tagged_commit" "$APPROVED_COMMIT" ||
+                 ! git diff --quiet "$tagged_commit" "$APPROVED_COMMIT" -- "$package_path"; then
+                echo "::error::$tag conflicts with the approved package contents. Prepare a new version; existing tags are immutable."
+                exit 1
+              fi
+              printf '%s\t%s\n' "$tag" "$tagged_commit" >> "$RUNNER_TEMP/existing-release-tags.tsv"
+            else
+              printf '%s\n' "$tag" >> "$RUNNER_TEMP/new-release-tags.txt"
+            fi
+          done < "$RUNNER_TEMP/release-packages.tsv"
+          if [[ -n "$GLOBAL_TAG" ]]; then
+            if git show-ref --verify --quiet "refs/tags/$GLOBAL_TAG"; then
+              tagged_commit="$(git rev-parse "refs/tags/$GLOBAL_TAG^{commit}")"
+              if [[ "$tagged_commit" != "$APPROVED_COMMIT" ]]; then
+                echo "::error::$GLOBAL_TAG already points to a different commit. Existing tags are immutable."
+                exit 1
+              fi
+              printf '%s\t%s\n' "$GLOBAL_TAG" "$tagged_commit" >> "$RUNNER_TEMP/existing-release-tags.tsv"
+            else
+              printf '%s\n' "$GLOBAL_TAG" >> "$RUNNER_TEMP/new-release-tags.txt"
+            fi
+          fi
+          count="$(wc -l < "$RUNNER_TEMP/new-release-tags.txt" | tr -d '[:space:]')"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "New tags to sign: $count"
+          cat "$RUNNER_TEMP/new-release-tags.txt"
+
+      - name: Import the release signing key
+        if: steps.plan.outputs.count != '0'
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          test -n "$RELEASE_GPG_PRIVATE_KEY" || { echo '::error::Configure the release environment secret RELEASE_GPG_PRIVATE_KEY.'; exit 1; }
+          if [[ ! "$RELEASE_GPG_FINGERPRINT" =~ ^[0-9A-F]{40}$ ]]; then
+            echo '::error::Configure RELEASE_GPG_FINGERPRINT with the full uppercase fingerprint.'
+            exit 1
+          fi
+          test -n "$RELEASE_GIT_NAME"
+          test -n "$RELEASE_GIT_EMAIL"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+          fingerprint="$(gpg --batch --with-colons --list-secret-keys "$RELEASE_GPG_FINGERPRINT" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test "$fingerprint" = "$RELEASE_GPG_FINGERPRINT"
+          gpg --batch --with-colons --list-keys "$RELEASE_GPG_FINGERPRINT" |
+            awk -F: -v email="$RELEASE_GIT_EMAIL" '$1 == "uid" && index($10, "<" email ">") { found = 1 } END { exit !found }'
+          git config user.name "$RELEASE_GIT_NAME"
+          git config user.email "$RELEASE_GIT_EMAIL"
+          git config user.signingkey "$RELEASE_GPG_FINGERPRINT"
+          git config gpg.format openpgp
+          git config gpg.program gpg
+          git config tag.gpgsign true
+
+      - name: Sign new package tags through Lerna
+        if: steps.plan.outputs.count != '0'
+        run: |
+          pnpm exec lerna exec --no-private --concurrency 1 -- bash -euo pipefail -c '
+            tag="$LERNA_PACKAGE_NAME@$(jq -r .version package.json)"
+            if grep -Fxq -- "$tag" "$RUNNER_TEMP/new-release-tags.txt"; then
+              git tag --sign --local-user "$RELEASE_GPG_FINGERPRINT" \
+                --message "Release $tag" "$tag" "$APPROVED_COMMIT"
+            fi
+          '
+          if [[ -n "$GLOBAL_TAG" ]] && grep -Fxq -- "$GLOBAL_TAG" "$RUNNER_TEMP/new-release-tags.txt"; then
+            git tag --sign --local-user "$RELEASE_GPG_FINGERPRINT" \
+              --message "Release $GLOBAL_TAG" "$GLOBAL_TAG" "$APPROVED_COMMIT"
+          fi
+          while IFS= read -r tag; do
+            test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$APPROVED_COMMIT"
+            git verify-tag "$tag"
+          done < "$RUNNER_TEMP/new-release-tags.txt"
+          test "$(git rev-parse HEAD)" = "$APPROVED_COMMIT"
+          git diff --exit-code
+          git diff --cached --exit-code
+
+      - name: Push the signed tags atomically
+        if: steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          refs=()
+          while IFS= read -r tag; do
+            refs+=("refs/tags/$tag")
+          done < "$RUNNER_TEMP/new-release-tags.txt"
+          test "${#refs[@]}" -gt 0
+          git -c push.followTags=false -c credential.helper='!gh auth git-credential' \
+            push --atomic origin "${refs[@]}"
+
+      - name: Summarize release tags
+        run: |
+          {
+            echo '## Signed release tags'
+            echo "Approved commit: $APPROVED_COMMIT"
+            while IFS= read -r tag; do
+              printf '\n- Created and verified: `%s`\n' "$tag"
+            done < "$RUNNER_TEMP/new-release-tags.txt"
+            while IFS=$'\t' read -r tag tagged_commit; do
+              printf '\n- Preserved existing tag: `%s` at `%s` (signature unchanged)\n' "$tag" "$tagged_commit"
+            done < "$RUNNER_TEMP/existing-release-tags.tsv"
+            echo
+            echo 'Existing tags were not replaced or re-signed. No versions, branch commits, npm packages, or GitHub Releases were created.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the signing key from the runner
+        if: always()
+        run: |
+          if [[ -d "${GNUPGHOME:-}" ]]; then
+            gpgconf --kill gpg-agent || true
+            rm -rf -- "$GNUPGHOME"
+          fi

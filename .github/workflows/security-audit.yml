@@ -1,0 +1,52 @@
+name: Dependency security audit
+on:
+  pull_request:
+    branches: [next]
+  push:
+    branches: [next]
+  schedule:
+    - cron: '30 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install dependencies for complete audit paths
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Audit dependencies
+        run: |
+          report="$RUNNER_TEMP/dependency-audit.json"
+          audit_status=0
+          pnpm audit --json > "$report" || audit_status=$?
+          cat "$report"
+          # Registry errors, muted findings, unexpected statuses/schema must fail closed.
+          jq -e --argjson status "$audit_status" '
+            type == "object" and (has("error") | not) and .muted == [] and
+            (.advisories | type == "object") and
+            (.metadata.vulnerabilities | keys == ["critical", "high", "info", "low", "moderate"]) and
+            (.metadata.vulnerabilities | all(.[]; type == "number" and . >= 0)) and
+            (([.metadata.vulnerabilities[]] | add) == ([.advisories[].findings | length] | add // 0)) and
+            (($status == 0 and (.advisories | length) == 0) or
+             ($status == 1 and (.advisories | length) > 0)) and
+            (.advisories | all(.[];
+              (.module_name | type == "string") and
+              (.findings | type == "array" and length > 0) and
+              (.findings | all(.[]; (.version | type == "string") and
+                (.paths | type == "array" and length > 0) and
+                (.paths | all(.[]; type == "string"))))))
+          ' "$report" > /dev/null
+          if ! jq -e '.advisories | length == 0' "$report" > /dev/null; then
+            echo "::error::Dependency audit found vulnerabilities. All findings must be resolved."
+            exit 1
+          fi
