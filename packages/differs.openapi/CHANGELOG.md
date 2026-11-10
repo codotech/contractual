@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0-beta.4](https://github.com/codotech/contractual/compare/%40contractual%2Fdiffers.openapi%400.1.0-beta.3...%40contractual%2Fdiffers.openapi%400.1.0-beta.4) (2026-11-10)
+
+### Bug Fixes
+
+* **differs.openapi:** account for property addition constraints ([#63](https://github.com/codotech/contractual/issues/63)) ([b63fd34](https://github.com/codotech/contractual/commit/b63fd340f5fde8926e193fcbb16bf31aa7774f1e)), closes [#3206](https://github.com/codotech/contractual/issues/3206)
+
+
 # [0.1.0-beta.3](https://github.com/codotech/contractual/compare/%40contractual%2Fdiffers.openapi%400.1.0-beta.2...%40contractual%2Fdiffers.openapi%400.1.0-beta.3) (2026-11-09)
 
 ### Bug Fixes
