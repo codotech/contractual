@@ -439,3 +439,98 @@ test('a dialect change cannot prove equal nested nullable schemas compatible', (
     expect.objectContaining({ category: 'property-added', severity: 'breaking' }),
   ]);
 });
+
+describe('property additions respect explicit JSON Schema dialects', () => {
+  const draft4 = 'http://json-schema.org/draft-04/schema#';
+  const draft7 = 'http://json-schema.org/draft-07/schema#';
+  const draft2020 = 'https://json-schema.org/draft/2020-12/schema';
+
+  test('an embedded draft-04 const cannot prove response compatibility', () => {
+    const oldSchema = { type: 'object', additionalProperties: { const: 1 } };
+    const newSchema = {
+      ...oldSchema,
+      properties: { value: { $schema: draft4, $id: 'urn:value', id: 'urn:value', const: 1 } },
+    };
+    // { value: 2 } is new-valid because draft-04 does not enforce const.
+    expect(
+      diffOpenApiObjects(spec('response', oldSchema), spec('response', newSchema)).changes
+    ).toEqual([expect.objectContaining({ category: 'property-added', severity: 'breaking' })]);
+  });
+
+  test.each(['document', 'parent', 'ancestor'] as const)(
+    '%s dialect changes invalidate textually equal nested constraints',
+    (location) => {
+      const value = { type: 'object', unevaluatedProperties: false };
+      let oldSchema: Schema = { type: 'object', additionalProperties: value };
+      let newSchema: Schema = { ...oldSchema, properties: { value } };
+      if (location === 'ancestor') {
+        oldSchema = { type: 'object', properties: { nested: oldSchema } };
+        newSchema = { type: 'object', properties: { nested: newSchema } };
+      }
+      if (location !== 'document') {
+        oldSchema.$schema = draft7;
+        newSchema.$schema = draft2020;
+      }
+      const oldSpec = spec('request', oldSchema);
+      const newSpec = spec('request', newSchema);
+      if (location === 'document') {
+        oldSpec.jsonSchemaDialect = draft7;
+        newSpec.jsonSchemaDialect = draft2020;
+      }
+      // A value with any property was accepted when unevaluatedProperties was
+      // ignored by draft-07, but is rejected under 2020-12.
+      expect(diffOpenApiObjects(oldSpec, newSpec).changes).toContainEqual(
+        expect.objectContaining({ category: 'property-added', severity: 'breaking' })
+      );
+    }
+  );
+
+  test('identical nested schemas with unsupported dialects require review', () => {
+    const value = { type: 'object', properties: { nested: { $schema: draft4, const: 1 } } };
+    const oldSchema = { type: 'object', additionalProperties: value };
+    const newSchema = { ...oldSchema, properties: { value } };
+    expect(
+      diffOpenApiObjects(spec('response', oldSchema), spec('response', newSchema)).changes
+    ).toEqual([expect.objectContaining({ category: 'property-added', severity: 'breaking' })]);
+  });
+
+  test.each(['https://spec.openapis.org/oas/3.1/dialect/base', draft2020, `${draft2020}#`])(
+    'supported explicit dialect %s preserves compatibility',
+    (dialect) => {
+      const oldSchema = { $schema: dialect, type: 'object', additionalProperties: { const: 1 } };
+      const newSchema = { ...oldSchema, properties: { value: { $schema: dialect, const: 1 } } };
+      const oldSpec = { ...spec('response', oldSchema), jsonSchemaDialect: dialect };
+      const newSpec = { ...spec('response', newSchema), jsonSchemaDialect: dialect };
+      expect(diffOpenApiObjects(oldSpec, newSpec).changes).toEqual([
+        expect.objectContaining({ category: 'property-added', severity: 'non-breaking' }),
+      ]);
+    }
+  );
+});
+
+describe('dialect detection distinguishes schemas from user data', () => {
+  test.each([{ default: { $schema: 'user data' } }, { examples: [{ $schema: 'user data' }] }])(
+    'annotation %j does not constrain an open input',
+    (value) => {
+      const oldSchema = { type: 'object' };
+      const newSchema = { ...oldSchema, properties: { value } };
+      expect(
+        diffOpenApiObjects(spec('request', oldSchema), spec('request', newSchema)).changes
+      ).toEqual([
+        expect.objectContaining({ category: 'property-added', severity: 'non-breaking' }),
+      ]);
+    }
+  );
+
+  test.each([
+    { type: 'object', properties: { $schema: { type: 'string' } } },
+    { const: { $schema: 'user data' } },
+    { enum: [{ $schema: 'user data' }] },
+  ])('equal constraints with literal $schema data remain compatible: %j', (value) => {
+    const oldSchema = { type: 'object', additionalProperties: value };
+    const newSchema = { ...oldSchema, properties: { value } };
+    expect(
+      diffOpenApiObjects(spec('request', oldSchema), spec('request', newSchema)).changes
+    ).toEqual([expect.objectContaining({ category: 'property-added', severity: 'non-breaking' })]);
+  });
+});

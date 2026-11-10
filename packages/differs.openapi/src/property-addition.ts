@@ -57,12 +57,15 @@ const UNSUPPORTED_PARENT_KEYS = [
 export function classifyPropertyAddition(
   change: RawChange,
   oldUsesNullable: boolean,
-  newUsesNullable: boolean
+  newUsesNullable: boolean,
+  supportedDocumentDialects = true
 ): ChangeSeverity {
   const context = change.propertyAddition;
   if (!context || !change.schemaDirection) return 'breaking';
   // Equal nested schemas need not have equal semantics across dialect changes.
-  if (oldUsesNullable !== newUsesNullable) return 'breaking';
+  if (!supportedDocumentDialects || oldUsesNullable !== newUsesNullable) return 'breaking';
+  if (context.schemaDialects?.some((dialect) => oldUsesNullable || !supportedDialect(dialect)))
+    return 'breaking';
   const { name, oldParent, newParent } = context;
   if (
     context.uncertain ||
@@ -83,6 +86,13 @@ export function classifyPropertyAddition(
   // also appears in properties. additionalProperties applies only otherwise.
   if (oldConstraints.length === 0) oldConstraints.push(oldParent.additionalProperties ?? true);
   newConstraints.push(change.newValue);
+
+  if (
+    [...oldConstraints, ...newConstraints].some((schema) =>
+      containsUnsupportedDialect(schema, oldUsesNullable)
+    )
+  )
+    return 'breaking';
 
   const compatible =
     change.schemaDirection === 'input'
@@ -106,7 +116,9 @@ function matchingPatterns(patterns: unknown, name: string): unknown[] | null {
 function assertions(schema: unknown, usesNullable: boolean): unknown {
   if (!isSchemaObject(schema)) return schema;
   const result = Object.fromEntries(
-    Object.entries(schema).filter(([key]) => !ANNOTATIONS.has(key) && key !== 'nullable')
+    Object.entries(schema).filter(
+      ([key]) => !ANNOTATIONS.has(key) && key !== 'nullable' && key !== '$schema'
+    )
   );
   // OpenAPI 3.0 adds null only to an explicit, local type. Other assertions,
   // including enum, still apply. In 3.1 nullable is not a validation keyword.
@@ -158,6 +170,60 @@ function containsReference(value: unknown, seen = new Set<unknown>()): boolean {
   seen.add(value);
   const found = Object.entries(value).some(
     ([key, child]) => key === '$ref' || key === '$dynamicRef' || containsReference(child, seen)
+  );
+  seen.delete(value);
+  return found;
+}
+
+// Only dialects whose assertion semantics this bounded proof implements.
+export function supportedDialect(dialect: unknown): boolean {
+  return (
+    typeof dialect === 'string' &&
+    [
+      'https://spec.openapis.org/oas/3.1/dialect/base',
+      'https://json-schema.org/draft/2020-12/schema',
+    ].includes(dialect.replace(/#$/, ''))
+  );
+}
+
+// Traverse schema positions only: annotations, enum/const values, and names in
+// property maps can contain arbitrary JSON, including a literal "$schema" key.
+function containsUnsupportedDialect(
+  value: unknown,
+  usesNullable: boolean,
+  seen = new Set<unknown>()
+): boolean {
+  if (!isSchemaObject(value)) return false;
+  if (seen.has(value)) return true;
+  if (Object.hasOwn(value, '$schema') && (usesNullable || !supportedDialect(value.$schema)))
+    return true;
+  seen.add(value);
+  const singleSchemas = [
+    'additionalProperties',
+    'unevaluatedProperties',
+    'propertyNames',
+    'items',
+    'contains',
+    'additionalItems',
+    'unevaluatedItems',
+    'not',
+    'if',
+    'then',
+    'else',
+  ].flatMap((key) => (Array.isArray(value[key]) ? value[key] : [value[key]]));
+  const schemaArrays = ['allOf', 'anyOf', 'oneOf', 'prefixItems'].flatMap((key) =>
+    Array.isArray(value[key]) ? value[key] : []
+  );
+  const schemaMaps = [
+    'properties',
+    'patternProperties',
+    '$defs',
+    'definitions',
+    'dependentSchemas',
+    'dependencies',
+  ].flatMap((key) => (isSchemaObject(value[key]) ? Object.values(value[key]) : []));
+  const found = [...singleSchemas, ...schemaArrays, ...schemaMaps].some((schema) =>
+    containsUnsupportedDialect(schema, usesNullable, seen)
   );
   seen.delete(value);
   return found;

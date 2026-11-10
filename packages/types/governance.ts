@@ -281,6 +281,8 @@ export interface RawChange {
     newParent: Record<string, unknown>;
     /** Ancestor evaluation/composition prevents a local compatibility proof. */
     uncertain?: boolean;
+    /** Explicit dialect declarations on enclosing old/new schemas. */
+    schemaDialects?: unknown[];
   };
 }
 

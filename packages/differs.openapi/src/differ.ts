@@ -9,7 +9,7 @@ import type { ChangeSeverity, DiffResult, RawChange } from '@contractual/types';
 import { assembleResult, classify, classifyPropertyAdded } from '@contractual/differs.core';
 import { resolveOpenApiSpec } from './resolver.js';
 import { diffStructural } from './structural.js';
-import { classifyPropertyAddition } from './property-addition.js';
+import { classifyPropertyAddition, supportedDialect } from './property-addition.js';
 
 /**
  * Diff two OpenAPI specification files
@@ -39,9 +39,18 @@ export function diffOpenApiObjects(
   const rawChanges = diffStructural(oldSpec, newSpec);
   const oldUsesNullable = typeof oldSpec.openapi === 'string' && oldSpec.openapi.startsWith('3.0.');
   const newUsesNullable = typeof newSpec.openapi === 'string' && newSpec.openapi.startsWith('3.0.');
+  const supportedDocumentDialects = [oldSpec, newSpec].every(
+    (spec) => !Object.hasOwn(spec, 'jsonSchemaDialect') || supportedDialect(spec.jsonSchemaDialect)
+  );
   return assembleResult(rawChanges, newSpec, {
     classifyFn: (change, schema) =>
-      classifyOpenApiChange(change, schema, oldUsesNullable, newUsesNullable),
+      classifyOpenApiChange(
+        change,
+        schema,
+        oldUsesNullable,
+        newUsesNullable,
+        supportedDocumentDialects
+      ),
   });
 }
 
@@ -49,7 +58,8 @@ function classifyOpenApiChange(
   change: RawChange,
   newSpec: unknown,
   oldUsesNullable: boolean,
-  newUsesNullable: boolean
+  newUsesNullable: boolean,
+  supportedDocumentDialects: boolean
 ): ChangeSeverity {
   if (change.enumConstraintEquivalent) return 'non-breaking';
 
@@ -91,7 +101,12 @@ function classifyOpenApiChange(
 
   if (change.type === 'property-added') {
     if (change.propertyAddition)
-      return classifyPropertyAddition(change, oldUsesNullable, newUsesNullable);
+      return classifyPropertyAddition(
+        change,
+        oldUsesNullable,
+        newUsesNullable,
+        supportedDocumentDialects
+      );
     return classifyPropertyAdded(change, newSpec);
   }
 
